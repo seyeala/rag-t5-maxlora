@@ -1,0 +1,41 @@
+base_model = "google/flan-t5-small"
+artifacts_dir = "artifacts"
+
+[data]
+max_tokens = 256
+overlap = 48
+dedup_threshold = 0.95
+
+[retriever]
+embed_model = "intfloat/e5-small-v2"
+index_type = "hnsw"
+hnsw_m = 32
+ef_search = 128
+hybrid_lambda = 0.25
+
+[lora]
+r = 16
+alpha = 32
+dropout = 0.05
+target_modules = ["q","k","v","o","wi_0","wi_1","wo"]
+
+[train]
+task = "sft"
+lr = 0.0005
+epochs = 3
+batch_size = 8
+grad_accum = 2
+weight_decay = 0.01
+warmup_ratio = 0.06
+label_smoothing = 0.1
+src_max_len = 512
+tgt_max_len = 128
+gradient_checkpointing = true
+
+[serve]
+k_retrieval = 2
+max_new_tokens = 128
+temperature = 0.3
+top_p = 0.8
+host = "0.0.0.0"
+port = 8080
