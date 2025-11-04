@@ -13,6 +13,13 @@ app = typer.Typer()
 def main(
     config: str = typer.Option("configs/defaults.toml", "--config", "-c"),
     override: str | None = typer.Option(None, "--override", "-o"),
+    notebook_file: str | None = typer.Option(  # noqa: ARG001
+        None,
+        "--file",
+        "-f",
+        hidden=True,
+        help="Compatibility shim for IPython which injects a -f argument.",
+    ),
 ) -> None:
     set_seed(42)
     cfg = load_settings(config, override)
