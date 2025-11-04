@@ -31,6 +31,8 @@ label_smoothing = 0.1
 src_max_len = 512
 tgt_max_len = 128
 gradient_checkpointing = true
+model_id = "google/flan-t5-small"
+
 
 [serve]
 k_retrieval = 2
