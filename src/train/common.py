@@ -12,7 +12,9 @@ from typing import Tuple
 import torch
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from transformers import (
+    AutoConfig,
     AutoModelForCausalLM,
+    AutoModelForSeq2SeqLM,
     AutoTokenizer,
     BitsAndBytesConfig,
     DataCollatorForLanguageModeling,
@@ -78,8 +80,16 @@ def load_tokenizer(model_id: str):
     return tokenizer
 
 
-def load_fp_model(model_id: str, torch_dtype=torch.bfloat16):
-    return AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch_dtype)
+def _get_model_cls(model_id: str):
+    config = AutoConfig.from_pretrained(model_id)
+    if getattr(config, "is_encoder_decoder", False):
+        return AutoModelForSeq2SeqLM, config
+    return AutoModelForCausalLM, config
+
+
+def load_fp_model(model_id: str, dtype=torch.bfloat16):
+    model_cls, config = _get_model_cls(model_id)
+    return model_cls.from_pretrained(model_id, config=config, dtype=dtype)
 
 
 def load_4bit_model(model_id: str):
@@ -89,8 +99,12 @@ def load_4bit_model(model_id: str):
         bnb_4bit_use_double_quant=True,
         bnb_4bit_compute_dtype=torch.bfloat16,
     )
-    return AutoModelForCausalLM.from_pretrained(
-        model_id, quantization_config=quant_config, device_map="auto"
+    model_cls, config = _get_model_cls(model_id)
+    return model_cls.from_pretrained(
+        model_id,
+        config=config,
+        quantization_config=quant_config,
+        device_map="auto",
     )
 
 
