@@ -42,6 +42,7 @@ class TrainCfg(BaseModel):
     src_max_len: int = 512
     tgt_max_len: int = 128
     gradient_checkpointing: bool = True
+    model_id: str | None = None
 
 
 class ServeCfg(BaseModel):
@@ -85,12 +86,16 @@ def load_settings(config_path: str, override_path: Optional[str] = None) -> AppC
             else:
                 data[k] = v
 
+    train_data = dict(data.get("train", {}))
+    if not train_data.get("model_id"):
+        train_data["model_id"] = data.get("base_model", "google/flan-t5-small")
+
     return AppCfg(
         base_model=data.get("base_model", "google/flan-t5-small"),
         artifacts_dir=data.get("artifacts_dir", "artifacts"),
         data=DataCfg(**data.get("data", {})),
         retriever=RetrieverCfg(**data.get("retriever", {})),
         lora=LoraCfg(**data.get("lora", {})),
-        train=TrainCfg(**data.get("train", {})),
+        train=TrainCfg(**train_data),
         serve=ServeCfg(**data.get("serve", {})),
     )
