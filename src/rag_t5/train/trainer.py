@@ -44,7 +44,7 @@ class TrainConfig:
     per_device_train_batch_size: int = 1
     gradient_accumulation_steps: int = 16
     learning_rate: float = 2e-4
-    bf16: bool = True
+    bf16: bool | None = None
     logging_steps: int = 10
     save_strategy: str = "no"
     lora_r: int = 16

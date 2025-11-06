@@ -6,6 +6,7 @@ import math
 import os
 import re
 import time
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Tuple
@@ -224,7 +225,7 @@ class TrainConfig:
     gradient_accumulation_steps: int = 16
     num_train_epochs: float = 1.0
     learning_rate: float = 2e-4
-    bf16: bool = True
+    bf16: bool | None = None
     logging_steps: int = 10
     save_strategy: str = "no"
 
@@ -237,16 +238,52 @@ def make_dataset(tokenizer, train_path, valid_path, max_length):
     return train_dataset, valid_dataset
 
 
+def _supports_bf16() -> bool:
+    """Return ``True`` when the current runtime can execute bf16 ops."""
+
+    if torch.cuda.is_available():
+        if hasattr(torch.cuda, "is_bf16_supported"):
+            try:
+                if torch.cuda.is_bf16_supported():
+                    return True
+            except RuntimeError:
+                pass
+
+        try:
+            major, _ = torch.cuda.get_device_capability()
+        except (RuntimeError, AssertionError, torch.cuda.CudaError):
+            major = 0
+        return major >= 8
+
+    # Other backends such as MPS currently do not offer bf16 training support
+    return False
+
+
 def run_trainer(model, tokenizer, train_ds, valid_ds, cfg: TrainConfig, extra_kwargs=None):
     collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
     training_args_sig = inspect.signature(TrainingArguments.__init__)
+    bf16_requested = cfg.bf16
+    bf16_supported = _supports_bf16()
+    if bf16_requested is None:
+        use_bf16 = bf16_supported
+    else:
+        use_bf16 = bf16_requested
+        if bf16_requested and not bf16_supported:
+            warnings.warn(
+                "bf16 training was requested but is not supported on this hardware. "
+                "Falling back to fp32.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            use_bf16 = False
+
     args_kwargs = dict(
         output_dir=cfg.out_dir,
         per_device_train_batch_size=cfg.per_device_train_batch_size,
         gradient_accumulation_steps=cfg.gradient_accumulation_steps,
         learning_rate=cfg.learning_rate,
         num_train_epochs=cfg.num_train_epochs,
-        bf16=cfg.bf16,
+        bf16=use_bf16,
         logging_steps=cfg.logging_steps,
         save_strategy=cfg.save_strategy,
         report_to="none",
