@@ -33,7 +33,7 @@ def evaluate(model_dir, valid_path, max_new_tokens=128, limit=200):
     tokenizer = AutoTokenizer.from_pretrained(model_dir, use_fast=True)
     model = AutoModelForCausalLM.from_pretrained(
         model_dir,
-        torch_dtype=torch.bfloat16 if torch.cuda.is_available() else None,
+        dtype=torch.bfloat16 if torch.cuda.is_available() else None,
     )
     model.eval()
 

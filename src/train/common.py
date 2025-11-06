@@ -13,6 +13,7 @@ from typing import Tuple
 
 import torch
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+from torch.utils.data import Dataset
 from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
@@ -69,29 +70,44 @@ def build_example(record):
     return text, len(record["prompt"])
 
 
+class PromptMaskedDataset(Dataset):
+    def __init__(self, records, tokenizer, max_len=512):
+        self.data = self._tokenize(records, tokenizer, max_len)
+
+    @staticmethod
+    def _tokenize(records, tokenizer, max_len):
+        input_ids, attention_mask, labels = [], [], []
+        for record in records:
+            text, _ = build_example(record)
+            encoded = tokenizer(
+                text, truncation=True, max_length=max_len, padding="max_length"
+            )
+            ids = encoded["input_ids"]
+            mask = encoded["attention_mask"]
+            prompt_ids = tokenizer(
+                record["prompt"], truncation=True, max_length=max_len
+            )["input_ids"]
+            label_vec = ids.copy()
+            for idx in range(min(len(prompt_ids), len(label_vec))):
+                label_vec[idx] = -100
+            input_ids.append(ids)
+            attention_mask.append(mask)
+            labels.append(label_vec)
+        return {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "labels": labels,
+        }
+
+    def __len__(self):
+        return len(self.data["input_ids"])
+
+    def __getitem__(self, idx):
+        return {key: value[idx] for key, value in self.data.items()}
+
+
 def tokenize_with_prompt_mask(records, tokenizer, max_len=512):
-    input_ids, attention_mask, labels = [], [], []
-    for record in records:
-        text, _ = build_example(record)
-        encoded = tokenizer(
-            text, truncation=True, max_length=max_len, padding="max_length"
-        )
-        ids = encoded["input_ids"]
-        mask = encoded["attention_mask"]
-        prompt_ids = tokenizer(
-            record["prompt"], truncation=True, max_length=max_len
-        )["input_ids"]
-        label_vec = ids.copy()
-        for idx in range(min(len(prompt_ids), len(label_vec))):
-            label_vec[idx] = -100
-        input_ids.append(ids)
-        attention_mask.append(mask)
-        labels.append(label_vec)
-    return {
-        "input_ids": input_ids,
-        "attention_mask": attention_mask,
-        "labels": labels,
-    }
+    return PromptMaskedDataset(records, tokenizer, max_len)
 
 
 # -------------------- Model helpers --------------------
@@ -117,7 +133,7 @@ def load_fp_model(model_id: str, dtype: torch.dtype | None = None):
     if dtype is None:
         use_bf16 = resolve_bf16(None, emit_warning=False)
         dtype = torch.bfloat16 if use_bf16 else torch.float32
-    return model_cls.from_pretrained(model_id, config=config, torch_dtype=dtype)
+    return model_cls.from_pretrained(model_id, config=config, dtype=dtype)
 
 
 def load_4bit_model(model_id: str):
@@ -319,14 +335,19 @@ def run_trainer(model, tokenizer, train_ds, valid_ds, cfg: TrainConfig, extra_kw
         args_kwargs["evaluation_strategy"] = "no"
 
     args = TrainingArguments(**args_kwargs)
-    trainer = Trainer(
+    trainer_kwargs = dict(
         model=model,
         args=args,
         train_dataset=train_ds,
         eval_dataset=valid_ds,
         data_collator=collator,
-        tokenizer=tokenizer,
     )
+    trainer_sig = inspect.signature(Trainer.__init__)
+    if "processing_class" in trainer_sig.parameters:
+        trainer_kwargs["processing_class"] = tokenizer
+    else:
+        trainer_kwargs["tokenizer"] = tokenizer
+    trainer = Trainer(**trainer_kwargs)
     reset_vram()
     start = time.time()
     trainer.train()
