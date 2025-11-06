@@ -64,6 +64,13 @@ def main() -> None:
         help="Choose the generator variant: base T5 or LoRA-adapted",
     )
     parser.add_argument(
+        "--adapter",
+        "-a",
+        type=str,
+        default=None,
+        help="Path to LoRA adapter weights (required when --model=lora)",
+    )
+    parser.add_argument(
         "--highlight",
         "-H",
         action="store_true",
@@ -141,12 +148,19 @@ def main() -> None:
     )
 
     model, tokenizer, device = load_base(cfg.base_model)
+    adapter_path = args.adapter or cfg.lora.adapter_path
+
     if args.model == "lora":
+        if not adapter_path:
+            parser.error(
+                "--adapter must be provided or [lora].adapter_path must be set in the config"
+            )
         lora_args = LoraArgs(
             r=cfg.lora.r,
             alpha=cfg.lora.alpha,
             dropout=cfg.lora.dropout,
             target_modules=cfg.lora.target_modules,
+            adapter_path=adapter_path,
         )
         model = apply_lora(model, lora_args)
         model.to(device)

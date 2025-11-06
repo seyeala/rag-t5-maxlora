@@ -28,6 +28,7 @@ class LoraCfg(BaseModel):
     target_modules: List[str] = Field(
         default_factory=lambda: ["q", "k", "v", "o", "wi_0", "wi_1", "wo"]
     )
+    adapter_path: str | None = None
 
 
 class TrainCfg(BaseModel):
