@@ -52,6 +52,7 @@ class ServeCfg(BaseModel):
     top_p: float = 0.8
     host: str = "0.0.0.0"
     port: int = 8080
+    adapter_dir: str | None = None
 
 
 class AppCfg(BaseModel):

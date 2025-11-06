@@ -13,6 +13,7 @@ app = typer.Typer()
 def main(
     config: str = typer.Option("configs/defaults.toml", "--config", "-c"),
     override: str | None = typer.Option(None, "--override", "-o"),
+    adapter_dir: str | None = typer.Option(None, "--adapter-dir"),
     notebook_file: str | None = typer.Option(  # noqa: ARG001
         None,
         "--file",
@@ -25,6 +26,7 @@ def main(
     cfg = load_settings(config, override)
 
     model, tok, device = load_base(cfg.base_model)
+    weights_path = adapter_dir or cfg.serve.adapter_dir
     model = apply_lora(
         model,
         LoraArgs(
@@ -32,6 +34,7 @@ def main(
             alpha=cfg.lora.alpha,
             dropout=cfg.lora.dropout,
             target_modules=cfg.lora.target_modules,
+            weights_path=weights_path,
         ),
     )
     model.print_trainable_parameters()

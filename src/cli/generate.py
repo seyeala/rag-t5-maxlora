@@ -100,6 +100,12 @@ def main() -> None:
         default=None,
         help="Optional override config path",
     )
+    parser.add_argument(
+        "--adapter_dir",
+        type=str,
+        default=None,
+        help="Path to a fine-tuned LoRA adapter (overrides config)",
+    )
     args = parser.parse_args()
 
     cfg = load_settings(args.config, args.override)
@@ -141,12 +147,19 @@ def main() -> None:
     )
 
     model, tokenizer, device = load_base(cfg.base_model)
+    adapter_dir = args.adapter_dir or getattr(cfg.serve, "adapter_dir", None)
     if args.model == "lora":
+        if adapter_dir is None:
+            parser.error(
+                "LoRA model requested but no adapter directory provided. "
+                "Specify --adapter_dir or set serve.adapter_dir in the config."
+            )
         lora_args = LoraArgs(
             r=cfg.lora.r,
             alpha=cfg.lora.alpha,
             dropout=cfg.lora.dropout,
             target_modules=cfg.lora.target_modules,
+            weights_path=adapter_dir,
         )
         model = apply_lora(model, lora_args)
         model.to(device)
