@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 import math
 import os
@@ -238,7 +239,8 @@ def make_dataset(tokenizer, train_path, valid_path, max_length):
 
 def run_trainer(model, tokenizer, train_ds, valid_ds, cfg: TrainConfig, extra_kwargs=None):
     collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
-    args = TrainingArguments(
+    training_args_sig = inspect.signature(TrainingArguments.__init__)
+    args_kwargs = dict(
         output_dir=cfg.out_dir,
         per_device_train_batch_size=cfg.per_device_train_batch_size,
         gradient_accumulation_steps=cfg.gradient_accumulation_steps,
@@ -247,9 +249,14 @@ def run_trainer(model, tokenizer, train_ds, valid_ds, cfg: TrainConfig, extra_kw
         bf16=cfg.bf16,
         logging_steps=cfg.logging_steps,
         save_strategy=cfg.save_strategy,
-        evaluation_strategy="no",
         report_to="none",
     )
+    if "eval_strategy" in training_args_sig.parameters:
+        args_kwargs["eval_strategy"] = "no"
+    else:
+        args_kwargs["evaluation_strategy"] = "no"
+
+    args = TrainingArguments(**args_kwargs)
     trainer = Trainer(
         model=model,
         args=args,
