@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import logging
 import math
 import os
 import re
@@ -22,6 +23,29 @@ from transformers import (
     Trainer,
     TrainingArguments,
 )
+
+try:
+    from transformers.utils import (
+        is_torch_bf16_cpu_available,
+        is_torch_bf16_gpu_available,
+    )
+except (ImportError, AttributeError):  # pragma: no cover - fallback for older versions
+    def is_torch_bf16_gpu_available():
+        if not torch.cuda.is_available():
+            return False
+        checker = getattr(torch.cuda, "is_bf16_supported", None)
+        if callable(checker):
+            try:
+                return bool(checker())
+            except TypeError:
+                return False
+        return False
+
+    def is_torch_bf16_cpu_available():
+        return False
+
+
+logger = logging.getLogger(__name__)
 
 
 # -------------------- Data IO --------------------
@@ -88,9 +112,12 @@ def _get_model_cls(model_id: str):
     return AutoModelForCausalLM, config
 
 
-def load_fp_model(model_id: str, dtype=torch.bfloat16):
+def load_fp_model(model_id: str, dtype: torch.dtype | None = None):
     model_cls, config = _get_model_cls(model_id)
-    return model_cls.from_pretrained(model_id, config=config, dtype=dtype)
+    if dtype is None:
+        use_bf16 = resolve_bf16(None, emit_warning=False)
+        dtype = torch.bfloat16 if use_bf16 else torch.float32
+    return model_cls.from_pretrained(model_id, config=config, torch_dtype=dtype)
 
 
 def load_4bit_model(model_id: str):
@@ -126,6 +153,40 @@ def peak_vram_gb():
     if torch.cuda.is_available():
         return torch.cuda.max_memory_allocated() / (1024 ** 3)
     return 0.0
+
+
+def bf16_available() -> bool:
+    """Return ``True`` when the current runtime supports bfloat16 training."""
+
+    if torch.cuda.is_available() and is_torch_bf16_gpu_available():
+        return True
+    try:
+        if is_torch_bf16_cpu_available():
+            return True
+    except TypeError:
+        # Older versions may not expose the CPU helper yet.
+        pass
+    return False
+
+
+def resolve_bf16(requested: bool | None, *, emit_warning: bool = True) -> bool:
+    """Decide whether to enable bfloat16 based on the hardware and user request."""
+
+    if requested is True:
+        if not bf16_available():
+            raise ValueError(
+                "bf16 precision was requested but is not supported by the current runtime."
+            )
+        return True
+    if requested is False:
+        return False
+
+    if bf16_available():
+        return True
+
+    if emit_warning:
+        logger.info("bfloat16 not available; falling back to float32 precision.")
+    return False
 
 
 # -------------------- Layer indexing --------------------
@@ -224,7 +285,7 @@ class TrainConfig:
     gradient_accumulation_steps: int = 16
     num_train_epochs: float = 1.0
     learning_rate: float = 2e-4
-    bf16: bool = True
+    bf16: bool | None = None
     logging_steps: int = 10
     save_strategy: str = "no"
 
@@ -240,13 +301,14 @@ def make_dataset(tokenizer, train_path, valid_path, max_length):
 def run_trainer(model, tokenizer, train_ds, valid_ds, cfg: TrainConfig, extra_kwargs=None):
     collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
     training_args_sig = inspect.signature(TrainingArguments.__init__)
+    use_bf16 = resolve_bf16(cfg.bf16)
     args_kwargs = dict(
         output_dir=cfg.out_dir,
         per_device_train_batch_size=cfg.per_device_train_batch_size,
         gradient_accumulation_steps=cfg.gradient_accumulation_steps,
         learning_rate=cfg.learning_rate,
         num_train_epochs=cfg.num_train_epochs,
-        bf16=cfg.bf16,
+        bf16=use_bf16,
         logging_steps=cfg.logging_steps,
         save_strategy=cfg.save_strategy,
         report_to="none",
