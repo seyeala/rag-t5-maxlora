@@ -9,7 +9,7 @@ def _load(model_dir):
     tokenizer = AutoTokenizer.from_pretrained(model_dir, use_fast=True)
     model = AutoModelForCausalLM.from_pretrained(
         model_dir,
-        torch_dtype=torch.bfloat16 if torch.cuda.is_available() else None,
+        dtype=torch.bfloat16 if torch.cuda.is_available() else None,
     )
     model.eval()
     return tokenizer, model
