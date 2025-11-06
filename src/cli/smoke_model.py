@@ -13,6 +13,12 @@ app = typer.Typer()
 def main(
     config: str = typer.Option("configs/defaults.toml", "--config", "-c"),
     override: str | None = typer.Option(None, "--override", "-o"),
+    adapter: str | None = typer.Option(
+        None,
+        "--adapter",
+        "-a",
+        help="Optional path to LoRA adapter weights",
+    ),
     notebook_file: str | None = typer.Option(  # noqa: ARG001
         None,
         "--file",
@@ -32,6 +38,7 @@ def main(
             alpha=cfg.lora.alpha,
             dropout=cfg.lora.dropout,
             target_modules=cfg.lora.target_modules,
+            adapter_path=adapter or cfg.lora.adapter_path,
         ),
     )
     model.print_trainable_parameters()
