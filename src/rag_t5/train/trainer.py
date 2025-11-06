@@ -11,6 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Sequence
 
+import torch
+
 from train.common import (
     LoRA_TARGETS_ATT_MLP,
     TrainConfig as _TrainerConfig,
@@ -22,6 +24,7 @@ from train.common import (
     load_tokenizer,
     make_dataset,
     run_trainer,
+    resolve_bf16,
     unfreeze_lm_head,
 )
 
@@ -44,7 +47,7 @@ class TrainConfig:
     per_device_train_batch_size: int = 1
     gradient_accumulation_steps: int = 16
     learning_rate: float = 2e-4
-    bf16: bool = True
+    bf16: bool | None = None
     logging_steps: int = 10
     save_strategy: str = "no"
     lora_r: int = 16
@@ -72,8 +75,10 @@ def train(config: TrainConfig):
         :func:`train.common.run_trainer`.
     """
 
+    use_bf16 = resolve_bf16(config.bf16)
     tokenizer = load_tokenizer(config.model_id)
-    model = load_fp_model(config.model_id)
+    model_dtype = torch.bfloat16 if use_bf16 else torch.float32
+    model = load_fp_model(config.model_id, dtype=model_dtype)
     model = apply_lora_everywhere(
         model,
         r=config.lora_r,
@@ -99,7 +104,7 @@ def train(config: TrainConfig):
         gradient_accumulation_steps=config.gradient_accumulation_steps,
         num_train_epochs=config.num_train_epochs,
         learning_rate=config.learning_rate,
-        bf16=config.bf16,
+        bf16=use_bf16,
         logging_steps=config.logging_steps,
         save_strategy=config.save_strategy,
     )
