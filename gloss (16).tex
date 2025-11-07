@@ -1,0 +1,73 @@
+\documentclass[11pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb}
+\usepackage{bm}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\title{Glossary \& Notation (Standalone)}
+\date{}
+\begin{document}
+\maketitle
+% Auto-generated Glossary & Notation (propose-only)
+% File: glossary_notation.tex
+% Source: /mnt/data/main (32).tex
+% This file is standalone (no new packages required).
+% Place it near your main .tex and include via: \input{glossary_notation}
+
+\section*{Glossary \& Notation}
+
+\subsection*{Glossary of Concepts (brief, citable)}
+\begin{description}[leftmargin=2.2em, style=nextline]
+  \item[Positional Encoding (sinusoidal)] Fixed sinusoidal vectors added to token embeddings; dimensions alternate sine/cosine with wavelengths $10000^{2j/d_{\text{model}}}$, enabling relative position information without learned parameters. [Source: \href{https://arxiv.org/abs/1706.03762}{Vaswani et\,al., 2017}].
+  \item[Scaled Dot-Product Attention] Computes weights from $QK^{\top}/\sqrt{d_k}$ (optionally with a mask); applies softmax and forms a weighted sum of values $V$. [Source: \href{https://arxiv.org/abs/1706.03762}{Vaswani et\,al., 2017}].
+  \item[Multi-Head Attention (MHA)] Projects $Q,K,V$ into $h$ subspaces, applies scaled dot-product attention in parallel, concatenates heads, and linearly projects the result. [Source: \href{https://arxiv.org/abs/1706.03762}{Vaswani et\,al., 2017}].
+  \item[Position-wise Feed-Forward Network (FFN)] Two affine layers with a nonlinearity applied independently at each position: expand to $d_{\text{ff}}$ then project back to $d_{\text{model}}$. [Source: \href{https://arxiv.org/abs/1706.03762}{Vaswani et\,al., 2017}].
+  \item[Layer Normalization] Normalizes activations using per-sample mean and variance across features in a layer, improving stability and training speed independent of batch size. [Source: \href{https://arxiv.org/abs/1607.06450}{Ba, Kiros, Hinton, 2016}].
+  \item[Residual Connection] Adds the sublayer input to its output to ease optimization and enable very deep networks; used around attention and FFN blocks. [Source: \href{https://www.cv-foundation.org/openaccess/content_cvpr_2016/papers/He_Deep_Residual_Learning_CVPR_2016_paper.pdf}{He et\,al., 2016}].
+  \item[Causal (autoregressive) Mask] Strictly upper-triangular mask that prevents attention to future positions during decoding. [Source: \href{https://arxiv.org/abs/1706.03762}{Vaswani et\,al., 2017}].
+  \item[Padding Mask] Mask that prevents attention to PAD tokens so they do not affect outputs. [Source: \href{https://arxiv.org/abs/1706.03762}{Vaswani et\,al., 2017}].
+  \item[Softmax] Exponentiates and normalizes scores to a probability simplex; used to convert logits to class probabilities. [Source: Goodfellow, Bengio, Courville, \emph{Deep Learning}, 2016 (MIT Press)].
+  \item[Cross-Entropy Loss] Negative log-likelihood of the true class under the predicted distribution; the standard multiclass classification loss. [Source: Bishop, \emph{Pattern Recognition and Machine Learning}, 2006, \href{https://doi.org/10.1007/978-0-387-31073-2}{DOI:10.1007/978-0-387-31073-2}].
+  \item[LoRA (Low-Rank Adaptation)] Parametrizes a weight update $\Delta W = A B$ with rank $r$ (often scaled by $\alpha/r$); trains $A,B$ while freezing base weights to reduce trainable parameters. [Source: \href{https://arxiv.org/abs/2106.09685}{Hu et\,al., 2021}].
+  \item[QLoRA] Finetunes LoRA adapters on a frozen 4-bit quantized base model using NF4 and double quantization with paged optimizers to minimize memory. [Source: \href{https://arxiv.org/abs/2305.14314}{Dettmers et\,al., 2023}].
+  \item[GLUE Benchmark] Suite of nine NLU tasks and an evaluation server for general language understanding. [Source: \href{https://arxiv.org/abs/1804.07461}{Wang et\,al., 2018}].
+  \item[SST (Stanford Sentiment Treebank)] Treebank with fine-grained sentiment labels for phrases and sentences from movie reviews. [Source: \href{https://aclanthology.org/D13-1170/}{Socher et\,al., 2013}].
+  \item[CoLA (Corpus of Linguistic Acceptability)] Acceptability dataset of 10{,}657 sentences labeled grammatical vs.\ ungrammatical from linguistics literature. [Source: \href{https://arxiv.org/abs/1805.12471}{Warstadt et\,al., 2018}].
+\end{description}
+
+\subsection*{Symbols and Notation (unified)}
+\noindent\small
+\begin{tabular}{p{0.22\textwidth} p{0.34\textwidth} p{0.16\textwidth} p{0.22\textwidth}}
+\textbf{Symbol} & \textbf{Meaning} & \textbf{Type/Shape} & \textbf{First use (section)}\\ \hline
+$|\mathcal{V}|$ & Vocabulary size & scalar & Notation\\
+$d_{\text{model}}$ & Model width & scalar & Notation\\
+$d_{\text{ff}}$ & FFN hidden width & scalar & Notation\\
+$h$ & Number of attention heads & scalar & Notation\\
+$d_k,\; d_v$ & Per-head key/query and value width & scalar & Notation\\
+$X\in\mathbb{R}^{\ell\times d_{\text{model}}}$ & Input token embeddings (sequence) & matrix & MHA\\
+$Q,K,V$ & Queries, keys, values & matrices & SDPA\\
+$W_Q^{(a)}, W_K^{(a)}, W_V^{(a)}$ & Per-head projections & $d_{\text{model}}\!\times\! d_{k/v}$ & MHA\\
+$W_O$ & Output projection & $h d_v\!\times\! d_{\text{model}}$ & MHA\\
+$W_E$ & Token embedding matrix & $|\mathcal{V}|\!\times\! d_{\text{model}}$ & Notation\\
+$M$ & Attention mask ($0$ keep, $-\infty$ mask) & matrix & SDPA\\
+$\mathrm{PE}(i,j)$ & Sinusoidal positional encoding & function & Positional Encoding\\
+$\mathrm{LN}(\cdot)$ & Layer normalization operator & function & Residual + LayerNorm\\
+$\mathrm{Attention}(Q,K,V;M)$ & Scaled dot-product attention & $\ell\times d_v$ output & SDPA\\
+$\mathrm{MHA}(X;M)$ & Multi-head attention & $\ell\times d_{\text{model}}$ output & MHA\\
+$r$ & LoRA rank & scalar & Training Regime / LoRA\\
+$A\in\mathbb{R}^{d_{\text{out}}\times r}$ & LoRA down-projection & matrix & Training Regime / LoRA\\
+$B\in\mathbb{R}^{r\times d_{\text{in}}}$ & LoRA up-projection & matrix & Training Regime / LoRA\\
+$\Delta W = A B$ & Trainable LoRA update & matrix & Training Regime / LoRA\\
+$Q_4(W_0)$ & 4-bit quantized base weights & operator & Training Regime / QLoRA\\
+\end{tabular}
+
+% --- Optional: Notation policy (propose-only; do not edit manuscript without approval) ---
+% Vectors bold italic, matrices bold upright; hats for estimators; bars for means; transpose = ^\top.
+% \newcommand{\vect}[1]{\boldsymbol{#1}}
+% \newcommand{\mat}[1]{\mathbf{#1}}
+% \newcommand{\set}[1]{\mathcal{#1}}
+% \newcommand{\trans}{\mathsf{T}} % or simply use ^\top
+% ------------------------------------------------------------------------------
+\end{document}

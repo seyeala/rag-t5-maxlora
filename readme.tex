@@ -1,0 +1,385 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{courier}
+\usepackage{geometry}
+\geometry{margin=1in}
+\begin{document}
+
+\section*{RAG-T5-MaxLoRA \\ \large Retrieval-Augmented Generation with T5 and LoRA}
+\label{sec:intro}
+
+\textbf{RAG-T5-MaxLoRA} is a framework for \emph{Retrieval-Augmented Generation} (RAG) using T5 language models with LoRA (Low-Rank Adapters) fine-tuning. It enables ingestion of custom documents, chunking them for retrieval, fine-tuning a T5 model on instruction-following data (e.g., Alpaca), and answering queries by retrieving relevant document chunks and generating responses. The project provides scripts for data preparation, model training (multiple fine-tuning variants), evaluation, and an interactive Gradio demo.
+
+\subsection*{Features}
+\begin{itemize}
+    \item \textbf{Instruction Fine-Tuning}: Fine-tune a Flan-T5 model on instruction-response pairs (e.g. Alpaca dataset) using LoRA or partial parameter training. Three variants are included (full mid-layer fine-tuning, QLoRA mid-layer, tiny LoRA last-layer) to explore different efficiency vs. performance trade-offs:contentReference[oaicite:94]{index=94}:contentReference[oaicite:95]{index=95}.
+    \item \textbf{Retrieval Pipeline}: Ingest and chunk custom text documents. Build a vector index (FAISS) of document chunks for retrieval-augmented generation. The T5 model can prepend retrieved text chunks to its input to ground its answers in external knowledge.
+    \item \textbf{Interactive Demo}: Launch a Gradio web UI to chat with the fine-tuned model, providing a user-friendly interface for testing instruction following or Q\&A.
+    \item \textbf{Utilities}: Scripts for data preprocessing (preparing Alpaca dataset), evaluation (Exact Match/F1 on validation data:contentReference[oaicite:96]{index=96}:contentReference[oaicite:97]{index=97}, classification accuracy, etc.), and a smoke test CLI to verify model and LoRA setup.
+\end{itemize}
+
+\section{Installation and Setup}
+\textbf{Requirements:}
+\begin{itemize}
+    \item Python 3.9 or higher:contentReference[oaicite:98]{index=98}.
+    \item PyTorch (with CUDA for GPU acceleration). Install a version suitable for your system (e.g., via pip or conda).
+    \item At least one GPU (recommended for training; CPU can be used for small-scale tests or inference).
+    \item Internet connection (to download Hugging Face models/datasets on first run).
+\end{itemize}
+
+\textbf{Dependencies:} Core dependencies include Hugging Face Transformers, \texttt{peft} (for LoRA), \texttt{torch}, \texttt{typer} (CLI), and \texttt{pydantic}:contentReference[oaicite:99]{index=99}. Additional required libraries:
+\begin{itemize}
+    \item \textbf{datasets} (Hugging Face Datasets) – for loading Alpaca dataset:contentReference[oaicite:100]{index=100}.
+    \item \textbf{tqdm} – for progress bars in data processing:contentReference[oaicite:101]{index=101}.
+    \item \textbf{faiss} – for vector indexing (use \texttt{faiss-cpu} or \texttt{faiss-gpu}).
+    \item \textbf{gradio} – for the web demo interface:contentReference[oaicite:102]{index=102}.
+\end{itemize}
+
+All necessary libraries can be installed via pip. Clone the repository and install in editable mode:
+\begin{verbatim}
+git clone https://github.com/seyeala/rag-t5-maxlora.git
+cd rag-t5-maxlora
+python3 -m venv .venv         # optional: create virtual env
+source .venv/bin/activate     # activate the env
+pip install -e .
+\end{verbatim}
+
+The above uses the project’s \texttt{pyproject.toml} to install core dependencies:contentReference[oaicite:103]{index=103}. You may need to install some packages not specified there (e.g., \texttt{datasets}, \texttt{tqdm}, \texttt{faiss-cpu}, \texttt{gradio}) with pip:
+\begin{verbatim}
+pip install datasets tqdm faiss-cpu gradio
+\end{verbatim}
+*(Use \texttt{faiss-gpu} instead of CPU version if applicable.)*
+
+Verify the installation by importing the module:
+\begin{verbatim}
+python -c "import rag_t5; print('Install OK')"
+\end{verbatim}
+
+\section{Quick Start: Smoke Test}
+After installation, run a quick smoke test to ensure the model and LoRA are working. The project provides a CLI command \texttt{smoke-model} (installed via the console script):contentReference[oaicite:104]{index=104} that loads a base T5 model, applies a LoRA adapter, and generates a sample output:
+\begin{verbatim}
+smoke-model
+\end{verbatim}
+This will load the default base model and LoRA config and print a sample generation. For example, it will translate a test sentence, outputting something like:
+\begin{verbatim}
+=== OUTPUT ===
+Das Haus ist wunderbar.
+\end{verbatim}
+This is the model’s translation of “The house is wonderful.” into German:contentReference[oaicite:105]{index=105}. Seeing a coherent output confirms the model and tokenizer loaded correctly and LoRA layers are active. (By default the base model is \texttt{google/flan-t5-small}:contentReference[oaicite:106]{index=106} as set in the config, and LoRA parameters are from \texttt{configs/defaults.toml}:contentReference[oaicite:107]{index=107}.)
+
+\section{Fine-Tuning the Model (Instruction Tuning)}
+The repository supports fine-tuning a T5 model on instruction-following data (like Alpaca) with different strategies. Fine-tuning produces LoRA adapter weights that specialize the model.
+
+\subsection{Prepare Training Data (Alpaca)}
+The 52k Alpaca instruction-response dataset will be downloaded and processed automatically by the training scripts if not present. You can also run it manually:
+\begin{verbatim}
+python -m src.data.prepare_alpaca
+\end{verbatim}
+This downloads the \emph{yahma/alpaca-cleaned} dataset and converts it into prompt-response JSONL format:contentReference[oaicite:108]{index=108}. It shuffles and splits the data (90\% train, 10\% validation):contentReference[oaicite:109]{index=109}, saving:
+\begin{itemize}
+    \item \texttt{data/processed/alpaca\_train.jsonl}
+    \item \texttt{data/processed/alpaca\_valid.jsonl}
+\end{itemize}
+Each line in these files is a JSON object with \texttt{"prompt"} and \texttt{"answer"}. You should see a message:
+\begin{verbatim}
+Wrote 50000 train / 5200 valid records to data/processed
+\end{verbatim}
+:contentReference[oaicite:110]{index=110}indicating the number of examples in each split.
+
+\emph{Note:} The training script automatically calls this step if the Alpaca data is not yet prepared:contentReference[oaicite:111]{index=111}, so running it manually is optional.
+
+\subsection{Fine-Tuning Variants}
+Three fine-tuning strategies (variants) are provided:
+\begin{itemize}
+    \item \textbf{v1 – “Middle FT”}: Partial fine-tuning of the model’s \emph{middle layers}. All other layers are frozen, except the LM head. No LoRA is used (weights of those middle layers are directly fine-tuned):contentReference[oaicite:112]{index=112}:contentReference[oaicite:113]{index=113}. This trains fewer parameters than full-model fine-tuning.
+    \item \textbf{v2 – “QLoRA Middle” (Default)}: 4-bit quantization + LoRA on middle layers. The base model is loaded in 4-bit precision:contentReference[oaicite:114]{index=114} (using bitsandbytes via \texttt{peft}), and LoRA adapters are applied to all attention and MLP layers:contentReference[oaicite:115]{index=115}. Only the middle third of these layers’ LoRA weights are left unfrozen for training:contentReference[oaicite:116]{index=116} (others are frozen), along with the LM head.
+    \item \textbf{v3 – “Tiny LoRA Last-2”}: LoRA adapters on only the \emph{last 2 layers} of the model, all other layers frozen:contentReference[oaicite:117]{index=117}. This drastically reduces trainable parameters (for a very lightweight fine-tune) at some cost in fine-tuning effectiveness.
+\end{itemize}
+
+Each variant uses default hyperparameters (which you can override):
+- Epochs: 1 (one pass through the training set).
+- Batch size: 1 (with gradient accumulation to simulate larger batch).
+- Gradient Accumulation: 16 (so effective batch size = 16).
+- Learning rate: variant-specific (e.g., 1e-5 for v1, 2e-4 for v2/v3 by default).
+
+Each variant will save the fine-tuned model (adapter and tokenizer) under an output directory:
+\begin{itemize}
+    \item \textbf{v1} outputs to \texttt{outputs/v1\_middle\_ft}:contentReference[oaicite:118]{index=118}:contentReference[oaicite:119]{index=119}
+    \item \textbf{v2} outputs to \texttt{outputs/v2\_qlora\_middle}:contentReference[oaicite:120]{index=120}
+    \item \textbf{v3} outputs to \texttt{outputs/v3\_tiny\_last2\_lora}:contentReference[oaicite:121]{index=121}
+\end{itemize}
+
+\subsection{Running Training}
+You can launch training via the provided shell script or Makefile. Ensure you have a GPU environment ready. For example, to run the v2 (QLoRA) training:
+\begin{verbatim}
+bash scripts/train_variant.sh v2
+\end{verbatim}
+(You can also do \texttt{make v2} which calls the same script.) This will first prepare the Alpaca data if needed:contentReference[oaicite:122]{index=122}, then begin fine-tuning. By default, it will use the base model \texttt{deepseek-ai/DeepSeek-V2-Lite-Chat}:contentReference[oaicite:123]{index=123}. Training logs (loss, step timings, etc.) will be shown. After completion, the LoRA adapter and tokenizer are saved to \texttt{outputs/v2\_qlora\_middle}:contentReference[oaicite:124]{index=124}:contentReference[oaicite:125]{index=125}. A file \texttt{efficiency.json} in that directory contains stats like training time, peak VRAM, and number of trainable parameters:contentReference[oaicite:126]{index=126}:contentReference[oaicite:127]{index=127}.
+
+For example, the script may output:
+\begin{verbatim}
+Efficiency: {"trainable_params": 37748736, "trainable_pct": 3.1,
+             "peak_vram_gb": 10.5, "wall_time_s": 3600}
+\end{verbatim}
+which indicates ~37.7M parameters were trainable (about 3.1\% of the total model) and other resource usage metrics.
+
+\textbf{Adjusting hyperparameters:} You can override defaults by setting environment variables or script arguments:
+\begin{verbatim}
+# Example: train for 3 epochs with batch size 8 (accumulation 2)
+EPOCHS=3 BS=8 ACCUM=2 bash scripts/train_variant.sh v2
+\end{verbatim}
+This runs 3 epochs, with per-device batch size 8 and grad accumulation 2 (effective batch = 16). 
+
+To change the base model, set the \texttt{MODEL\_ID} environment variable. E.g., to use Flan-T5 Small instead of the default DeepSeek model:
+\begin{verbatim}
+MODEL_ID="google/flan-t5-small" bash scripts/train_variant.sh v2
+\end{verbatim}
+The script will download and use the specified HuggingFace model:contentReference[oaicite:128]{index=128} as the base.
+
+\emph{Training time:} On a modern single GPU, one epoch on 50k examples (with above defaults) might take a few hours. QLoRA (v2) uses 4-bit precision to reduce memory, allowing larger models or batches on a given GPU.
+
+\section{Evaluation}
+After training, evaluate the model on validation data or other benchmarks:
+
+\subsection*{Instruction Following (Alpaca Eval)}
+Use \texttt{src/eval/eval\_instruction.py} to compute metrics on the Alpaca validation set:
+\begin{verbatim}
+python -m src.eval.eval_instruction --model_dir outputs/v2_qlora_middle \
+    --valid_path data/processed/alpaca_valid.jsonl
+\end{verbatim}
+This loads the model from \texttt{outputs/v2\_qlora\_middle} and generates responses for the validation examples (by default 200 examples):contentReference[oaicite:129]{index=129}:contentReference[oaicite:130]{index=130}. It then computes Exact Match (EM) and F1 between the model outputs and reference answers:contentReference[oaicite:131]{index=131}:contentReference[oaicite:132]{index=132}. The result is printed as JSON, e.g.:
+\begin{verbatim}
+{"n": 5200, "EM": 0.32, "F1": 0.56}
+\end{verbatim}
+indicating the model answered 32\% exactly correctly and achieved an average F1 of 0.56. (These numbers are illustrative only.)
+
+\subsection*{SST-2 Sentiment Classification (Optional)}
+The repo also provides \texttt{src/eval/eval\_sst2.py} for evaluating on the SST-2 sentiment dataset (as an example of prompting the model for classification). If you prepare the SST-2 validation set in JSONL (prompt + answer format), run:
+\begin{verbatim}
+python -m src.eval.eval_sst2 --model_dir outputs/v2_qlora_middle \
+    --path data/processed/sst2_validation.jsonl
+\end{verbatim}
+It will prompt the model for each example and interpret the generated text as "positive"/"negative" to compute accuracy:contentReference[oaicite:133]{index=133}:contentReference[oaicite:134]{index=134}, printing the accuracy score.
+
+\subsection*{Interactive Evaluation}
+For qualitative assessment, you can use the Gradio demo (next section) to interact with the model. Pose various questions or instructions to see how well it performs.
+
+\section{Interactive Demo (Gradio Chat)}
+After fine-tuning, launch the Gradio web interface to chat with your model:
+\begin{verbatim}
+bash scripts/run_gradio.sh outputs/v2_qlora_middle
+\end{verbatim}
+This starts a local web server (default on port 7860):contentReference[oaicite:135]{index=135}. The console will show a local URL (and possibly a public URL). Open it in a browser to see the chat interface.
+
+The interface has:
+\begin{itemize}
+    \item A text box for an \textbf{Instruction} (your question or command).
+    \item A text box for \textbf{Input} (optional context or clarifying information for the instruction).
+    \item A \textbf{Generate} button to produce the model’s response.
+    \item A box showing the \textbf{Response} from the model.
+\end{itemize}
+
+It is configured for single-turn interactions (one instruction at a time). The demo loads the specified model in evaluation mode and uses up to 256 tokens for the response generation:contentReference[oaicite:136]{index=136}.
+
+Example uses:
+\begin{itemize}
+    \item If you fine-tuned on Alpaca (instruction following): try asking something like, “\emph{Provide a brief summary of the benefits of exercise.}” The model should output a concise summary.
+    \item For a base or translation model: the prompt format includes “Instruction” and “Response” headings, so you could input: \emph{Instruction: Translate the following to German.\newline Input: I love programming.} The model should then produce: \emph{Ich liebe das Programmieren.}
+\end{itemize}
+
+You can adjust the generation parameters by editing the code (e.g., max_new_tokens or decoding strategy in \texttt{src/apps/gradio\_chat.py}) if needed. The default demo uses deterministic decoding (no sampling) for reproducibility.
+
+To stop the server, go to the terminal and press \texttt{Ctrl+C}.
+
+\section{Retrieval-Augmented Generation Pipeline}
+One of the main features of RAG-T5-MaxLoRA is enabling the model to use external knowledge from your documents. This involves: ingesting documents, chunking them, building a vector index, and then retrieving relevant chunks to prepend to the model’s input for generation. Below are the steps to set up and use the RAG pipeline.
+
+\subsection{Step 1: Document Ingestion}
+Gather your source documents in text form. For example, if you have a collection of articles or notes, put the \texttt{.txt} files under \texttt{data/raw/} (you can organize subdirectories as needed).
+
+Run the ingestion CLI:
+\begin{verbatim}
+python -m src.cli.ingest --input-dir data/raw --output data/processed/docs.jsonl
+\end{verbatim}
+This will read all .txt files in \texttt{data/raw} (recursively):contentReference[oaicite:137]{index=137}, normalize and clean the text:contentReference[oaicite:138]{index=138}, remove duplicates:contentReference[oaicite:139]{index=139} and very short files (default min length = 100 chars):contentReference[oaicite:140]{index=140}, and produce \texttt{data/processed/docs.jsonl}. Each line in this JSONL is a document record with:
+\begin{itemize}
+    \item \texttt{doc\_id}: a unique ID (based on file name and content hash):contentReference[oaicite:141]{index=141},
+    \item \texttt{title}: the source file name (without extension),
+    \item \texttt{text}: the full normalized text of the document,
+    \item \texttt{n\_chars}: character length of the text,
+    \item \texttt{source\_path}: original file path (relative to the input dir),
+    \item other metadata (like a SHA1 hash).
+\end{itemize}
+It also writes an index mapping JSON (by default \texttt{artifacts/models/docs\_index.json}) mapping each \texttt{doc\_id} to the file path:contentReference[oaicite:142]{index=142}.
+
+After ingestion, a summary is printed:
+\begin{verbatim}
+Ingest complete -> {'files_seen': 42, 'docs_written': 40,
+                    'duplicates': 2, 'too_short': 0,
+                    'out': 'data/processed/docs.jsonl'}
+\end{verbatim}
+:contentReference[oaicite:143]{index=143}This indicates 42 files scanned, 40 docs kept (2 duplicates skipped, 0 too short).
+
+\subsection{Step 2: Document Chunking}
+Next, split the documents into smaller chunks for retrieval. Run:
+\begin{verbatim}
+python -m src.cli.chunk --docs data/processed/docs.jsonl \
+    --out data/processed/chunks.jsonl
+\end{verbatim}
+This will take each document from \texttt{docs.jsonl} and chunk its text. By default, the chunk size is 256 tokens with a 48-token overlap:contentReference[oaicite:144]{index=144}. The CLI uses the base model’s tokenizer to count tokens:contentReference[oaicite:145]{index=145} and splits text on paragraph boundaries, etc., to form chunks not exceeding the limit:contentReference[oaicite:146]{index=146}:contentReference[oaicite:147]{index=147}. The output \texttt{chunks.jsonl} contains one JSON per chunk with:
+\begin{itemize}
+    \item \texttt{chunk\_id}: \texttt{<doc\_id>:NNNN} (the doc ID plus a zero-padded chunk index):contentReference[oaicite:148]{index=148},
+    \item \texttt{doc\_id}: the originating document’s ID,
+    \item \texttt{text}: the chunk text,
+    \item \texttt{token\_count}: length of this chunk in tokens,
+    \item \texttt{start\_token}, \texttt{end\_token}: the range in the original doc this chunk covers,
+    \item \texttt{source\_path}, \texttt{title}: carried over from the doc.
+\end{itemize}
+
+Upon completion, it prints a summary:
+\begin{verbatim}
+Chunking complete -> {'docs': 40, 'chunks': 120,
+                      'avg_tokens': 250.5,
+                      'out': 'data/processed/chunks.jsonl'}
+\end{verbatim}
+:contentReference[oaicite:149]{index=149}indicating 40 docs produced 120 chunks (avg ~250 tokens each, for example).
+
+\subsection{Step 3: Building the Vector Index}
+Now convert the text chunks into vectors and index them for similarity search. This involves using an embedding model (default: \textbf{intfloat/e5-small-v2}) to get vector representations of each chunk and using FAISS to create an index.
+
+\textit{Note: Currently, the repository does not have an automated indexing script, so you will need to do this step manually (e.g., in a Python script or notebook).}
+
+General steps:
+\begin{enumerate}
+    \item \textbf{Load the embedding model and tokenizer.} For example:
+\begin{verbatim}
+from transformers import AutoTokenizer, AutoModel
+model_name = "intfloat/e5-small-v2"
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModel.from_pretrained(model_name)
+model.eval()
+\end{verbatim}
+    \item \textbf{Embed each chunk.} For each chunk text (from \texttt{chunks.jsonl}), tokenize it and obtain the embedding. The E5 model outputs a sequence of hidden states; you can mean-pool them (as shown in the generate script’s `_embed_query` function:contentReference[oaicite:150]{index=150}:contentReference[oaicite:151]{index=151}) to get a single 768-dimensional (for e5-base) or 384-d (for e5-small) vector. Make sure to process in batches or with no grad.
+    \item \textbf{Create a FAISS index.} Choose an index type:
+        \begin{itemize}
+            \item For brute-force (exact) search, use \texttt{faiss.IndexFlatIP} (for cosine similarity if vectors are normalized) or \texttt{IndexFlatL2}.
+            \item For approximate search, use \texttt{IndexHNSWFlat} for HNSW (as suggested by default config) or \texttt{IndexIVFFlat}, etc.
+        \end{itemize}
+        E.g., for HNSW:
+\begin{verbatim}
+import faiss
+d = 384  # dimension of embeddings
+index = faiss.IndexHNSWFlat(d, 32)  # 32 is M (graph degree)
+index.hnsw.efConstruction = 128    # index construction parameter
+\end{verbatim}
+    \item \textbf{Add vectors to the index.} Convert your list of chunk vectors to a NumPy float32 array of shape (num_chunks, d). Then:
+\begin{verbatim}
+index.add(vectors_array)
+\end{verbatim}
+        The position of each vector in the index corresponds to the line in \texttt{chunks.jsonl} (0-based). Keep the chunks list in memory to map index results back to chunk data.
+    \item \textbf{Save the index.} For example:
+\begin{verbatim}
+faiss.write_index(index, "artifacts/models/chunks_index.faiss")
+\end{verbatim}
+        (Ensure the output directory exists.)
+\end{enumerate}
+
+After this, you should have a FAISS index file \texttt{chunks\_index.faiss} containing your chunk embeddings for fast retrieval.
+
+\subsection{Step 4: Retrieval-Augmented Generation (Query)}
+With the index ready, you can now answer questions using the RAG approach. The CLI tool \texttt{src/cli/generate.py} orchestrates this.
+
+Use the generate CLI with your query:
+\begin{verbatim}
+python -m src.cli.generate -q "Your question here" --model base --show_chunks
+\end{verbatim}
+
+Replace the query with your actual question. The options:
+\begin{itemize}
+    \item \texttt{-q/--query} (required): The input question or instruction:contentReference[oaicite:152]{index=152}.
+    \item \texttt{--model}: \texttt{base} or \texttt{lora}. \texttt{base} uses the base T5 model; \texttt{lora} applies LoRA adapters (with config-defined hyperparams) on the base model:contentReference[oaicite:153]{index=153}. If you fine-tuned a LoRA, you might use \texttt{--model lora} (see note below).
+    \item \texttt{--top\_k}: Number of chunks to retrieve (default 5):contentReference[oaicite:154]{index=154}.
+    \item \texttt{--highlight} (\texttt{-H}): Highlight query terms in retrieved text (wrap them with \texttt{<hl>..</hl>}):contentReference[oaicite:155]{index=155}.
+    \item \texttt{--context\_position}: \texttt{prepend} (default) or \texttt{append} – whether to place retrieved context before or after the query in the prompt:contentReference[oaicite:156]{index=156}.
+    \item \texttt{--max\_new\_tokens} (\texttt{-m}): Max tokens to generate for the answer (default 128):contentReference[oaicite:157]{index=157}.
+    \item \texttt{--temperature}: Sampling temperature (default 0.3; 0 for greedy):contentReference[oaicite:158]{index=158}.
+    \item \texttt{--top\_p}: Top-p sampling cutoff (default 0.8):contentReference[oaicite:159]{index=159}.
+    \item \texttt{--show\_chunks} (\texttt{-s}): If set, after giving the final answer, the script will display the retrieved chunks and their scores:contentReference[oaicite:160]{index=160}.
+\end{itemize}
+
+\textbf{Ensure the script can find the index and chunk files.} By default, it looks for:
+\begin{itemize}
+    \item \texttt{artifacts/processed/chunks.jsonl}:contentReference[oaicite:161]{index=161}
+    \item \texttt{artifacts/models/chunks\_index.faiss}:contentReference[oaicite:162]{index=162}
+\end{itemize}
+If you followed earlier steps, your files might be in \texttt{data/processed/} instead. Easiest fix: copy or move them to the expected locations:
+\begin{verbatim}
+mkdir -p artifacts/processed artifacts/models
+cp data/processed/chunks.jsonl artifacts/processed/
+cp <your_chunks_index.faiss> artifacts/models/chunks_index.faiss
+\end{verbatim}
+*(Also copy \texttt{docs\_index.json} to \texttt{artifacts/models/} if you want to preserve it.)*
+
+Now run a query. For example, if your documents include information about Python:
+\begin{verbatim}
+python -m src.cli.generate -q "What is Python used for?" \
+    --model base --top_k 3 --show_chunks
+\end{verbatim}
+The script will:
+\begin{itemize}
+    \item Normalize the query text:contentReference[oaicite:163]{index=163}.
+    \item Embed the query using the E5 model to get a vector:contentReference[oaicite:164]{index=164}.
+    \item Search the FAISS index for the top 3 similar chunk vectors:contentReference[oaicite:165]{index=165}.
+    \item Load the generator model (by default the base T5 as per config):contentReference[oaicite:166]{index=166}. If \texttt{--model lora} was chosen, it will initialize LoRA layers with the config settings:contentReference[oaicite:167]{index=167}.
+    \item Format the prompt by concatenating the retrieved chunks with the query (by default, chunks are prepended):contentReference[oaicite:168]{index=168}.
+    \item Generate an answer using the model (with the given decoding parameters):contentReference[oaicite:169]{index=169}.
+    \item Print the answer, and if \texttt{--show\_chunks} was set, print the retrieved chunks and scores:contentReference[oaicite:170]{index=170}.
+\end{itemize}
+
+Example output might look like:
+\begin{verbatim}
+Final Answer:
+Python is a versatile programming language used for building web applications,
+software development, data analysis, artificial intelligence, and more.
+
+Retrieved Chunks:
+[1] guide.txt:0000 (score=0.1234)
+Python is a high-level programming language often used for web development,
+data science, automation, and more.
+
+[2] guide.txt:0001 (score=0.1001)
+It is popular in data analysis, machine learning, scientific computing, and
+system scripting.
+
+[3] history.txt:0003 (score=0.0876)
+... <remaining chunk text> ...
+\end{verbatim}
+In this example, the model’s answer is based on content from the retrieved chunks (shown below the answer because \texttt{--show\_chunks} was used).
+
+You can now ask other questions by changing the query text.
+
+\textbf{Using LoRA-tuned model for generation:} If you fine-tuned the model with LoRA (e.g., on Alpaca), you likely want to use those weights when generating answers. The \texttt{--model lora} flag in the script applies LoRA with the configured hyperparameters, but it does not automatically load your trained adapter weights. To use your trained LoRA:
+\begin{itemize}
+    \item One simple way is to set the base model in \texttt{configs/defaults.toml} to your fine-tuned model’s directory (e.g., \texttt{outputs/v2\_qlora\_middle}) and use \texttt{--model base}. This way, the script will load the model including LoRA weights from that directory.
+    \item Alternatively, modify the generate script to load the LoRA checkpoint. For example, after loading the base model, use Hugging Face PEFT’s \texttt{PeftModel.from\_pretrained} to load your adapter. This requires some code changes.
+\end{itemize}
+By default, if you use \texttt{--model base}, you get answers from the base model; if you use \texttt{--model lora}, you get answers from a base model with fresh (untrained) LoRA applied. Adjusting the code as above will allow using the fine-tuned model for RAG.
+
+\section*{Summary}
+To recap, you can fine-tune the T5 model on instructions (improving its ability to follow prompts), ingest and index custom documents, and then perform retrieval-augmented QA where the model’s responses are grounded in your documents. By following the steps in this guide, a user with no prior knowledge of the project should be able to:
+\begin{itemize}
+    \item Install all requirements and set up the environment.
+    \item Run a smoke test to verify installation.
+    \item Execute training scripts (v1, v2, v3) to fine-tune the model, understanding what each variant does.
+    \item Evaluate the fine-tuned model’s performance on known datasets.
+    \item Launch a Gradio demo to interact with the model.
+    \item Use the ingestion and chunking tools to prepare a knowledge base.
+    \item Build a FAISS index of the knowledge base.
+    \item Ask questions using the generate CLI and get answers with retrieved context.
+\end{itemize}
+
+With this pipeline, RAG-T5-MaxLoRA can be adapted to various domains by plugging in relevant text data, fine-tuning if necessary, and then leveraging retrieval for enhanced performance. Happy experimenting!
+
+\end{document}

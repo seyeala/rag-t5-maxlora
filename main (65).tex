@@ -1,0 +1,534 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{graphicx}
+\usepackage{amsmath}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  urlcolor=blue,
+  citecolor=blue,
+  pdftitle={Small-Decoder Chatbot: Middle-Block Fine-Tuning vs QLoRA (All-Free)},
+  pdfauthor={Your Name}
+}
+
+% ----- Listings (code) style -----
+\lstdefinestyle{py}{
+  language=Python,
+  basicstyle=\ttfamily\footnotesize,
+  breaklines=true,
+  showstringspaces=false,
+  frame=single,
+  numbers=none,
+  keywordstyle=\bfseries,
+}
+\lstdefinestyle{bash}{
+  language=Bash,
+  basicstyle=\ttfamily\footnotesize,
+  breaklines=true,
+  showstringspaces=false,
+  frame=single,
+  numbers=none,
+}
+\lstset{tabsize=2}
+
+\title{Small-Decoder \textbf{Chatbot} Homework:\\ Middle-Block Fine-Tuning vs QLoRA (All-Free Stack)}
+\author{Your Name \quad|\quad Course Code}
+\date{\today}
+
+% === Added (minimal) notation for transformer components and loss ===
+\makeatletter
+\@ifundefined{DeclareMathOperator}{%
+  \newcommand{\Enc}{\mathrm{Enc}}%
+  \newcommand{\Dec}{\mathrm{Dec}}%
+  \newcommand{\Emb}{\mathrm{Emb}}%
+  \newcommand{\Tok}{\mathrm{Tok}}%
+  \newcommand{\Trans}{\mathrm{T}}%
+  \newcommand{\Loss \eqref{eq:loss}}{\mathcal{L}}%
+}{%
+  \DeclareMathOperator{\Enc}{Enc}
+  \DeclareMathOperator{\Dec}{Dec}
+  \DeclareMathOperator{\Emb}{Emb}
+  \DeclareMathOperator{\Tok}{Tok}
+  \DeclareMathOperator{\Trans}{T}
+}
+\makeatother
+% === End added notation ===
+\begin{document}
+\maketitle
+
+\section*{Overview}
+
+\section*{Notation}
+\begin{itemize}[leftmargin=2em]
+  \item Vocabulary size $|\mathcal{V}|$, model width $d_{\text{model}}$, feed-forward width $d_{\text{ff}}$, number of heads $h$, per-head key/value width $d_k=d_v=d_{\text{model}}/h$.
+  \item A source (encoder) sequence of length $n$: tokens $(s_1,\dots,s_n)$; a target (decoder) sequence of length $m$: $(t_1,\dots,t_m)$.
+  \item Embedding matrix $W_E \in \mathbb{R}^{|\mathcal{V}|\times d_{\text{model}}}$, with per-token embedding $e_i = W_E[\text{token}_i] \in \mathbb{R}^{d_{\text{model}}}$.
+  \item Positional Encod \eqref{eq:pe}ing $p_i \in \mathbb{R}^{d_{\text{model}}}$ (sinusoidal or learned); input to each stack is $x_i = \sqrt{d_{\text{model}}}\,e_i + p_i$.
+  \item All length-$\ell$ sequences are arranged row-wise into matrices in $\mathbb{R}^{\ell\times d_{\text{model}}}$.
+  \item Layer Normalization is denoted $\mathrm{LN}(\cdot)$; dropout is implied where standard.
+\end{itemize}
+
+\section{Positional Encoding}
+For absolute sinusoidal encodings, position $i\!\in\!\{1,\dots,\ell\}$ and channel index $0\!\leq\!2j\!<\!d_{\text{model}}$:
+\begin{align}
+\mathrm{PE}(i,2j)   &= \sin\!\Big(i/10000^{\frac{2j}{d_{\text{model}}}}\Big),&
+\mathrm{PE}(i,2j\!+\!1) &= \cos\!\Big(i/10000^{\frac{2j}{d_{\text{model}}}}\Big). \label{eq:pe}
+\end{align}
+These vectors are added to token embeddings at the input of the encoder and decoder stacks.
+
+\section{Scaled Dot-Product Attention \eqref{eq:sdpa}}
+Given queries $Q\!\in\!\mathbb{R}^{\ell_q\times d_k}$, keys $K\!\in\!\mathbb{R}^{\ell_k\times d_k}$, values $V\!\in\!\mathbb{R}^{\ell_k\times d_v}$ and an additive mask $M\!\in\!\mathbb{R}^{\ell_q\times \ell_k}$ with entries $0$ (keep) or $-\infty$ (mask), the attention map is
+\begin{equation}
+\mathrm{Attention}(Q,K,V;M) \;=\; \mathrm{softmax}\!\Big(\tfrac{QK^{\top}}{\sqrt{d_k}} + M\Big)\,V. \label{eq:sdpa}
+\end{equation}
+The \emph{padding mask} masks positions that correspond to PAD tokens; the decoder's \emph{causal (look-ahead) mask} additionally masks future positions $j>i$ so that token $t_i$ cannot attend to $t_{i+1:m}$.
+
+\section{Multi-Head Attention \eqref{eq:mha} (MHA)}
+For input $X\!\in\!\mathbb{R}^{\ell\times d_{\text{model}}}$ and head index $a\in\{1,\dots,h\}$, let
+\begin{equation}
+Q_a = X W_Q^{(a)},\quad K_a = X W_K^{(a)},\quad V_a = X W_V^{(a)},\qquad
+W_Q^{(a)},W_K^{(a)},W_V^{(a)} \in \mathbb{R}^{d_{\text{model}}\times d_k}.
+\label{eq:qkv_self}
+\end{equation}
+Define head outputs $H_a = \mathrm{Attention}(Q_a,K_a,V_a;M)$ with a mask $M$ as appropriate (padding or causal). Concatenate heads and project:
+\begin{equation}
+\mathrm{MHA}(X;M) \;=\; \mathrm{Concat}(H_1,\dots,H_h)\,W_O,\qquad W_O\in\mathbb{R}^{hd_v\times d_{\text{model}}}. \label{eq:mha}
+\end{equation}
+
+\section{Position-wise Feed-Forward Network \eqref{eq:ffn} (FFN)}
+Applied independently at each position $i$:
+\begin{equation}
+\mathrm{FFN}(x_i) \;=\; W_2\,\sigma(W_1 x_i + b_1) + b_2,\qquad
+W_1\in\mathbb{R}^{d_{\text{model}}\times d_{\text{ff}}},\;W_2\in\mathbb{R}^{d_{\text{ff}}\times d_{\text{model}}},
+\label{eq:ffn}
+\end{equation}
+where $\sigma$ is typically ReLU in the original Transformer (GELU is a common modern variant).
+
+\section{Residual + Layer Normalization Blocks}
+The original (``Post-LN \eqref{eq:postln}'') Transformer applies residual connections followed by Layer Normalization after each sub-layer:
+\begin{align}
+\mathrm{PostLNBlock}(X,\mathcal{F}) &= \mathrm{LN}\!\big(X + \mathrm{Dropout}(\mathcal{F}(X))\big).\label{eq:postln}
+\end{align}
+Many modern implementations use the ``Pre-LN'' variant, placing Layer Normalization \emph{before} each sub-layer:
+\begin{align}
+\mathrm{PreLNBlock}(X,\mathcal{F}) &= X + \mathrm{Dropout}\!\big(\mathcal{F}(\mathrm{LN}(X))\big).\label{eq:preln}
+\end{align}
+Here $\mathcal{F}$ is either MHA or FFN.
+
+\section{Encoder}
+The encoder is a stack of $L$ identical layers. Let $S\in\mathbb{R}^{n\times d_{\text{model}}}$ be the embedded source inputs (embeddings plus positions). For layer $\ell=1,\dots,L$:
+\begin{align}
+U^{(\ell)} &= \mathrm{PostLNBlock}\!\left(S^{(\ell-1)},\, X\mapsto \mathrm{MHA}(X;M_{\text{pad}})\right), \\
+S^{(\ell)} &= \mathrm{PostLNBlock}\!\left(U^{(\ell)},\; \mathrm{FFN}\right),
+\label{eq:postln_stack}
+\end{align}
+with $S^{(0)}=S$. (Replace with \eqref{eq:preln} to obtain the Pre-LN encoder.) The final encoder memory is $E \coloneqq S^{(L)}$.
+
+\section{Decoder}
+The decoder is also a stack of $L$ layers. Let $T\in\mathbb{R}^{m\times d_{\text{model}}}$ be the embedded target inputs (shifted right during training). For layer $\ell=1,\dots,L$:
+\begin{align}
+U^{(\ell)} &= \mathrm{PostLNBlock}\!\left(T^{(\ell-1)},\, X\mapsto \mathrm{MHA}(X;M_{\text{causal}} + M_{\text{pad}})\right), \\
+V^{(\ell)} &= \mathrm{PostLNBlock}\!\left(U^{(\ell)},\, X\mapsto \mathrm{MHA}\big(X;M_{\text{enc\text{-}dec}}\big)\right), \\
+T^{(\ell)} &= \mathrm{PostLNBlock}\!\left(V^{(\ell)},\; \mathrm{FFN}\right),
+\label{eq:postln_stack_2}
+\end{align}
+with $T^{(0)}=T$. The cross-attention mask $M_{\text{enc\text{-}dec}}$ applies padding from the source; queries come from the decoder stream while keys/values come from the encoder memory $E$:
+\begin{equation}
+\text{Cross-Attention:}\quad Q_a = V^{(\ell)}W_Q^{(a)},\qquad K_a = E W_K^{(a)},\qquad V_a = E W_V^{(a)}.
+\label{eq:qkv_cross}
+\end{equation}
+
+\section{Output Projection, Softmax, and Loss}
+Let $H = T^{(L)}\in\mathbb{R}^{m\times d_{\text{model}}}$ be final decoder states. Following the original paper, it is standard to \emph{tie} the output projection to the input embeddings: logits are
+\begin{equation}
+Z = H W_E^{\top} + b_{\text{lm}},\qquad Z\in\mathbb{R}^{m\times |\mathcal{V}|}.
+\label{eq:lm_logits}
+\end{equation}
+Per-token probabilities are $p_t = \mathrm{softmax}(Z_t)$. With label smoothing $\varepsilon\in[0,1)$, the smoothed target distribution for a true label $y_t$ is
+\begin{equation}
+\tilde{y}_t = (1-\varepsilon)\,\mathrm{onehot}(y_t) + \frac{\varepsilon}{|\mathcal{V}|}\,\bm{1}.
+\label{eq:label_smoothing}
+\end{equation}
+The masked Cross-Entropy Loss over non-PAD positions $\mathcal{I}$ is
+\begin{equation}
+\mathcal{L} = - \frac{1}{|\mathcal{I}|}\sum_{t\in\mathcal{I}} \tilde{y}_t^{\top}\log p_t. \label{eq:loss}
+\end{equation}
+
+\section{Complexities and Shapes}
+Self-attention in a length-$\ell$ sequence costs $\mathcal{O}(\ell^2 d_{\text{model}})$ time and $\mathcal{O}(\ell^2)$ memory for the attention map. Per-head shapes are $Q,K\in\mathbb{R}^{\ell\times d_k}$, $V\in\mathbb{R}^{\ell\times d_v}$; concatenation gives $\ell\times (hd_v)$ before the output projection.
+
+\section{Training Regime (Canonical)}
+The canonical setup: ReLU FFN, dropout in each sub-layer, Adam with warmup, label smoothing $\varepsilon=0.1$, and Post-LN residual blocks. Modern variants often prefer Pre-LN for stability and use GELU in the FFN.
+Layer Normalization is as defined by Ba \emph{et~al.}.
+
+\paragraph{Summary of terminology (checked against the literature).}
+\emph{Scaled Dot-Product Attention}, \emph{Multi-Head Attention}, \emph{Position-wise Feed-Forward Network}, \emph{Add \& Norm (residual + Layer Normalization)}, \emph{causal/look-ahead mask}, \emph{padding mask}, \emph{encoder--decoder (cross) attention}, \emph{Post-LN vs.\ Pre-LN}, \emph{label smoothing}, and \emph{weight tying} are the standard terms used in the primary sources.
+
+\vspace{1em}
+\noindent\textbf{End-to-end forward pass (decoder at time $t$).} With teacher forcing during training:
+\begin{align}
+S &= \big(\sqrt{d_{\text{model}}}E[s_1{:}s_n]\big) + P[1{:}n], \\
+E &= \mathrm{Encoder}(S), \\
+T_{1{:}t} &= \big(\sqrt{d_{\text{model}}}E[t_0{:}t_{t-1}]\big) + P[0{:}t-1], \qquad (\text{BOS}=t_0) \\
+H_{1{:}t} &= \mathrm{Decoder}(T_{1{:}t}, E), \\
+p_t &= \mathrm{softmax}\!\left(H_t W_E^{\top} + b_{\text{lm}}\right).
+\label{eq:seq2seq_flow}
+\end{align}
+
+You will build and evaluate a \textbf{chatbot} using a \textbf{small decoder LLM} and compare three training strategies under free-tier constraints:
+\begin{enumerate}[label=\textbf{A.\,}]
+  \item \textbf{Middle-block fine-tuning (structural)}: freeze embeddings and top/bottom layers; train only the \emph{middle} transformer blocks $+$ \texttt{lm\_head}.
+  \item \textbf{QLoRA (PEFT)}: 4-bit quantized loading with \textbf{LoRA} adapters applied to attention/MLP projections on the same middle slice \cite{dettmers2023qlora,hu2021lora}.
+  \item \textbf{Tiny baseline}: either head-only training or a minimal LoRA on just the \emph{top} few layers.
+\end{enumerate}
+
+You will deploy a \textbf{Gradio} chatbot UI, push weights to the \textbf{Hugging Face Hub}, and submit a short report. All tools and resources listed are free-tier compatible \cite{wolf2020transformers,gradio,bitsandbytes,hfhub}.
+
+\section*{Models \& Tasks (Choose One Model and One Task)}
+\paragraph{Model (Apache-2.0):}
+\begin{itemize}
+  \item \texttt{TinyLlama/TinyLlama-1.1B-Chat-v1.0} \cite{tinyllama} \quad or \quad \texttt{Qwen/Qwen2.5-0.5B-Instruct} \cite{qwen25}.
+\end{itemize}
+
+\paragraph{Task:}
+\begin{enumerate}[label=\arabic*)]
+  \item \textbf{Short-form instruction tuning} (single-turn): e.g., \texttt{yahma/alpaca-cleaned} \cite{alpaca-cleaned} or \texttt{databricks/databricks-dolly-15k} \cite{dolly15k}.\\
+        \emph{Note: Dolly-15k is CC BY-SA; attribute and share alike.}
+  \item \textbf{Sentiment-as-generation}: e.g., GLUE \texttt{sst2} (frame as ``\emph{Label?}'' $\rightarrow$ \emph{positive/negative}) \cite{glue}.
+\end{enumerate}
+
+\section*{Free Tooling}
+\begin{itemize}
+  \item \textbf{Compute}: Google Colab (free) or Kaggle (free) GPU.
+  \item \textbf{Python libs}: \texttt{transformers}, \texttt{datasets}, \texttt{peft}, \texttt{accelerate}, \texttt{bitsandbytes}, \texttt{evaluate}, \texttt{gradio}, \texttt{huggingface\_hub} \cite{wolf2020transformers,hfhub,bitsandbytes,gradio}.
+  \item \textbf{Weights \& demo hosting}: Hugging Face Hub and optional Space (free CPU).
+\end{itemize}
+
+\section*{What You Will Compare}
+Train \textbf{three variants} under the \textbf{same budget} (batch/epochs/seq length):
+\begin{enumerate}[label=\textbf{V\arabic*)}]
+  \item \textbf{Middle-block FT}: Train only the middle third of layers (plus \texttt{lm\_head}).
+  \item \textbf{QLoRA on middle layers}: 4-bit loading with LoRA on attention/\texttt{gate/up/down/o\_proj}.
+  \item \textbf{Tiny baseline}: head-only or LoRA on the top 1--2 layers.
+\end{enumerate}
+Report: trainable parameters, VRAM (peak), wall time, and quality metrics.
+
+\section*{Data Preparation (Small \& Free)}
+\begin{itemize}
+  \item Subsample $\sim$5{,}000 examples for instruction tuning or the training split of \texttt{sst2} for classification-as-generation.
+  \item Format single-turn prompts consistently (see code).
+  \item Keep \texttt{max\_length} $\leq$ 512 to fit free GPUs.
+\end{itemize}
+
+\section*{Evaluation}
+\begin{itemize}
+  \item \textbf{Automatic}: For instruction tuning, simple \emph{Exact Match} / token-level F1 on a small held-out set. For \texttt{sst2}, exact label match (``positive''/``negative''). Token-F1 uses $P=|y\cap\hat y|/|\hat y|$, $R=|y\cap\hat y|/|y|$, $F_1=2PR/(P{+}R)$.
+  \item \textbf{Human rubric} (30 prompts): \emph{Helpfulness} 0--2, \emph{Faithfulness} 0--2 (average).
+  \item \textbf{Efficiency}: trainable parameter count, peak VRAM, wall time / epoch. For LoRA on a weight $W$ of shape $d\times k$ and rank $r$, trainable params per module $=r(d{+}k)$ \cite{hu2021lora}.
+\end{itemize}
+
+\section*{Step-by-Step (Colab/Kaggle)}
+\paragraph{Install \& login (free):}
+\begin{lstlisting}[style=bash]
+pip -q install transformers datasets peft accelerate bitsandbytes evaluate gradio huggingface_hub
+huggingface-cli login
+\end{lstlisting}
+
+\paragraph{Load dataset and format single-turn chat:}
+\begin{lstlisting}[style=py]
+from datasets import load_dataset
+
+ds = load_dataset("yahma/alpaca-cleaned")  # or "glue", "sst2"
+def to_chat(example):
+    return {
+        "prompt": f"### Instruction:\n{example['instruction']}\n"
+                  f"### Input:\n{example.get('input','')}\n### Response:\n",
+        "response": example["output"]
+    }
+train = ds["train"].select(range(5000)).map(to_chat)  # small for free GPU
+\end{lstlisting}
+
+\paragraph{Load model in 4-bit (QLoRA-ready):}
+\begin{lstlisting}[style=py]
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
+MODEL = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"  # or "Qwen/Qwen2.5-0.5B-Instruct"
+bnb = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16)
+
+tok = AutoTokenizer.from_pretrained(MODEL, use_fast=True)
+tok.pad_token = tok.eos_token
+model = AutoModelForCausalLM.from_pretrained(MODEL, quantization_config=bnb, device_map="auto")
+\end{lstlisting}
+
+\paragraph{V1: Middle-block fine-tuning (freeze others):}
+Objective (freeze $\theta_{\ell\notin[s,e]}$): $\displaystyle \min_{\theta_{s:e}}\, -\sum_{(x,y)\in\mathcal{D}}\sum_t\log p_\theta(y_t\mid y_{<t},x)$ \cite{brown2020gpt3,bishop2006prml}.
+\begin{lstlisting}[style=py]
+# Freeze everything first
+for p in model.parameters():
+    p.requires_grad = False
+
+# Choose middle slice (e.g., middle third)
+L = len(model.model.layers)
+mid_idx = range(L//3, 2*L//3)
+for i in mid_idx:
+    for p in model.model.layers[i].parameters():
+        p.requires_grad = True
+
+# Always train the lm_head
+for p in model.lm_head.parameters():
+    p.requires_grad = True
+\end{lstlisting}
+
+% === Inserted: clarify train/freeze for V1 (as implemented) ===
+\noindent\textbf{Train vs.\ freeze (as implemented):}
+\begin{itemize}
+  \item \textbf{Train:} \texttt{lm\_head} only.
+  \item \textbf{Freeze:} embeddings (token and position, if any) and all transformer blocks.
+\end{itemize}
+\emph{Reason:} the model is loaded in 4-bit (\texttt{BitsAndBytes}); in this configuration only the non-quantized \texttt{lm\_head} parameters actually receive updates; unfreezing middle blocks has no effect.
+% === End insert V1 ===
+
+
+
+\paragraph{V2: QLoRA on the same middle slice:}
+Math: apply LoRA $\Delta W=\frac{\alpha}{r}BA$ (rank $r$) to 4-bit base $W_q=Q_4(W_0)$; update only $A,B$, forward $h=(W_q+\Delta W)x$ \cite{hu2021lora,dettmers2023qlora}.
+\begin{lstlisting}[style=py]
+from peft import LoraConfig, get_peft_model
+
+target_modules = ["q_proj","k_proj","v_proj","o_proj","gate_proj","up_proj","down_proj"]
+peft_cfg = LoraConfig(r=8, lora_alpha=16, lora_dropout=0.05, target_modules=target_modules)
+model = get_peft_model(model, peft_cfg)
+
+# (Optional) If you want to limit LoRA to certain layers,
+# configure target module names accordingly or filter by name when creating adapters.
+model.print_trainable_parameters()
+\end{lstlisting}
+
+% === Inserted: clarify train/freeze for V2 (as implemented) ===
+\noindent\textbf{Train vs.\ freeze (as implemented):}
+\begin{itemize}
+  \item \textbf{Train:} LoRA $A/B$ on \texttt{q\_proj}, \texttt{k\_proj}, \texttt{v\_proj}, \texttt{o\_proj}, \texttt{gate\_proj}, \texttt{up\_proj}, \texttt{down\_proj} in \emph{all} layers; (optionally) \texttt{lm\_head}.
+  \item \textbf{Freeze:} 4-bit base weights everywhere; no LoRA restriction to the middle slice.
+\end{itemize}
+% === End insert V2 ===
+
+
+
+\paragraph{V3: Tiny baseline (head-only or top-2 layers LoRA):}
+Head-only: optimize only $W_{\text{out}}$ with the same loss; $p=\mathrm{softmax}(W_{\text{out}}h)$, others frozen \cite{brown2020gpt3}.
+\begin{lstlisting}[style=py]
+# Head-only example (simple baseline):
+for p in model.parameters(): p.requires_grad = False
+for p in model.lm_head.parameters(): p.requires_grad = True
+\end{lstlisting}
+
+% === Inserted: clarify train/freeze for V3 (as implemented) ===
+\noindent\textbf{Train vs.\ freeze (as implemented):}
+\begin{itemize}
+  \item \textbf{Train:} \texttt{lm\_head} only (head-only baseline). \emph{(Optional alternative)}: LoRA $A/B$ only on the top-2 layers' projections.
+  \item \textbf{Freeze:} everything else (base weights and non-top-2 layers/adapters).
+\end{itemize}
+% === End insert V3 ===
+
+
+
+\paragraph{Tokenize and train (keep it tiny for free GPUs):}
+\begin{lstlisting}[style=py]
+from transformers import DataCollatorForLanguageModeling, Trainer, TrainingArguments
+
+def pack(example):
+    text = example["prompt"] + example["response"] + tok.eos_token
+    out = tok(text, truncation=True, max_length=512)
+    out["labels"] = out["input_ids"].copy()
+    return out
+
+tok_train = train.map(pack, remove_columns=train.column_names)
+collator = DataCollatorForLanguageModeling(tok, mlm=False)
+
+args = TrainingArguments(
+    output_dir="./out",
+    num_train_epochs=2,
+    per_device_train_batch_size=1,
+    gradient_accumulation_steps=16,
+    learning_rate=1e-4,
+    bf16=True,
+    logging_steps=25,
+    save_steps=500,
+    save_total_limit=2,
+)
+
+trainer = Trainer(model=model, args=args, train_dataset=tok_train, data_collator=collator)
+trainer.train()
+\end{lstlisting}
+
+\paragraph{Push weights to Hugging Face Hub:}
+\begin{lstlisting}[style=py]
+repo = "your-hf-handle/tinyllama-middleft-alpaca"  # change per variant
+trainer.model.push_to_hub(repo)
+tok.push_to_hub(repo)
+\end{lstlisting}
+
+\paragraph{Gradio chatbot (switch between variants):}
+\begin{lstlisting}[style=py]
+import gradio as gr
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM
+
+choices = {
+    "Middle-FT": "your-hf-handle/tinyllama-middleft-alpaca",
+    "QLoRA":     "your-hf-handle/tinyllama-qlora-alpaca",
+    "Baseline":  "your-hf-handle/tinyllama-headonly-alpaca"
+}
+
+state = {"name": list(choices.values())[0]}
+tok = AutoTokenizer.from_pretrained(state["name"], use_fast=True)
+lm  = AutoModelForCausalLM.from_pretrained(state["name"], torch_dtype=torch.bfloat16, device_map="auto")
+
+def switch(model_key):
+    name = choices[model_key]
+    global tok, lm
+    tok = AutoTokenizer.from_pretrained(name, use_fast=True)
+    lm  = AutoModelForCausalLM.from_pretrained(name, torch_dtype=torch.bfloat16, device_map="auto")
+    return f"Loaded {model_key}"
+
+def chat_fn(history, msg):
+    prompt = f"### Instruction:\\n{msg}\\n### Response:\\n"
+    inp = tok(prompt, return_tensors="pt").to(lm.device)
+    out = lm.generate(**inp, max_new_tokens=256, do_sample=False)
+    ans = tok.decode(out[0][inp['input_ids'].shape[1]:], skip_special_tokens=True)
+    history = (history or []) + [(msg, ans)]
+    return history, ""
+
+with gr.Blocks() as demo:
+    gr.Markdown("# Small-Decoder Chatbot — Middle-Block FT vs QLoRA")
+    dd = gr.Dropdown(list(choices.keys()), value="Middle-FT", label="Model")
+    status = gr.Markdown()
+    gr.Button("Load").click(switch, dd, status)
+    chat = gr.Chatbot()
+    box  = gr.Textbox(placeholder="Ask a short instruction...")
+    box.submit(chat_fn, [chat, box], [chat, box])
+
+demo.launch()
+\end{lstlisting}
+
+\section*{Deliverables}
+\begin{enumerate}[label=\arabic*.]
+  \item \textbf{Three HF repos} (one per variant) with README (task, data, hyperparams, trainable params).
+  \item \textbf{Gradio demo}: link to a Hugging Face Space or screenshots.
+  \item \textbf{1-page report}: metrics table (quality vs.\ trainable params vs.\ time), rubric scores, and 3 failure cases.
+\end{enumerate}
+
+\section*{Grading Rubric (Suggested)}
+\begin{center}
+\begin{tabular}{l r}
+Working chatbot \& deployment & 20\%\\
+Middle-block FT \& one baseline (QLoRA or head-only) & 35\%\\
+Fair comparison (same budget) \& metrics & 25\%\\
+HF Hub repos \& documentation & 10\%\\
+Report clarity \& insights & 10\%\\
+\hline
+\textbf{Total} & \textbf{100\%}
+\end{tabular}
+\end{center}
+
+\section*{Tips \& Pitfalls}
+\begin{itemize}
+  \item Keep sequence length $\leq$ 512, use gradient accumulation, and \texttt{bf16} to fit free GPUs.
+  \item Middle-block FT can overfit small data: fewer steps or early stopping.
+  \item For QLoRA, ensure 4-bit loading with \texttt{bitsandbytes}; include attention and MLP projections in \texttt{target\_modules}.
+  \item Respect dataset licenses (e.g., CC BY-SA for Dolly-15k).
+\end{itemize}
+
+\section*{License Note}
+All recommended models are Apache-2.0. Datasets have their own licenses; include attribution and follow share-alike where required.
+
+
+
+
+
+% ========== References (moved to end) ==========
+\bibliographystyle{plain}
+\begin{thebibliography}{99}
+\bibitem{vaswani2017}
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N.~Gomez, Lukasz Kaiser, and Illia Polosukhin.
+\newblock Attention Is All You Need.
+\newblock \emph{NeurIPS}, 2017.
+
+\bibitem{ba2016layernorm}
+Jimmy~Lei Ba, Jamie~Ryan Kiros, and Geoffrey~E. Hinton.
+\newblock Layer Normalization.
+\newblock \emph{arXiv:1607.06450}, 2016.
+
+\bibitem{xiong2020layernorm}
+Ruibin Xiong, Yunchang Yang, Di He, Kai Zheng, Shuxin Zheng, Chen Xing, Huishuai Zhang, Yanyan Lan, Liwei Wang, and Tie-Yan Liu.
+\newblock On Layer Normalization in the Transformer Architecture.
+\newblock In \emph{Proceedings of ICML}, 2020.
+\cite{vaswani2017attention}; we fine-tune via LoRA adapters \cite{hu2021lora}, optimizing token-level cross-entropy \cite{bishop2006prml}.
+
+\bibitem{hu2021lora}
+Hu, Edward J., et al. \emph{LoRA: Low-Rank Adaptation of Large Language Models}. 2021. \href{https://arxiv.org/abs/2106.09685}{arXiv:2106.09685}.
+
+\bibitem{dettmers2023qlora}
+Dettmers, Tim, et al. \emph{QLoRA: Efficient Finetuning of Quantized LLMs}. 2023. \href{https://arxiv.org/abs/2305.14314}{arXiv:2305.14314}.
+
+\bibitem{wolf2020transformers}
+Wolf, Thomas, et al. \emph{Transformers: State-of-the-Art Natural Language Processing}. EMNLP 2020 Demos. \href{https://arxiv.org/abs/1910.03771}{arXiv:1910.03771}.
+
+\bibitem{hfhub}
+Hugging Face Hub Documentation. \href{https://huggingface.co/docs/hub/index}{https://huggingface.co/docs/hub/index}.
+
+\bibitem{bitsandbytes}
+Dettmers, Tim. \emph{bitsandbytes: 8-bit optimizers and quantization}. \href{https://github.com/TimDettmers/bitsandbytes}{https://github.com/TimDettmers/bitsandbytes}.
+
+\bibitem{gradio}
+Abid, A., Abdalla, A., Abid, A., Khan, D., & Zou, J. \emph{Gradio: Hassle-Free Machine Learning Web Apps}. 2019. \href{https://arxiv.org/abs/1905.04227}{arXiv:1905.04227}. See also: \href{https://www.gradio.app}{https://www.gradio.app}.
+
+\bibitem{tinyllama}
+\emph{TinyLlama/TinyLlama-1.1B-Chat-v1.0} (model card). Hugging Face. \href{https://huggingface.co/TinyLlama/TinyLlama-1.1B-Chat-v1.0}{https://huggingface.co/TinyLlama/TinyLlama-1.1B-Chat-v1.0}.
+
+\bibitem{qwen25}
+\emph{Qwen/Qwen2.5-0.5B-Instruct} (model card). Hugging Face. \href{https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct}{https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct}.
+
+\bibitem{alpaca-cleaned}
+\emph{yahma/alpaca-cleaned} (dataset). Hugging Face. \href{https://huggingface.co/datasets/yahma/alpaca-cleaned}{https://huggingface.co/datasets/yahma/alpaca-cleaned}.
+
+\bibitem{dolly15k}
+\emph{databricks/databricks-dolly-15k} (dataset). Hugging Face. \href{https://huggingface.co/datasets/databricks/databricks-dolly-15k}{https://huggingface.co/datasets/databricks/databricks-dolly-15k}.
+
+\bibitem{glue}
+Wang, Alex, et al. \emph{GLUE: A Multi-Task Benchmark and Analysis Platform for Natural Language Understanding}. 2018. \href{https://gluebenchmark.com/}{https://gluebenchmark.com/}. Hugging Face dataset: \href{https://huggingface.co/datasets/glue}{https://huggingface.co/datasets/glue}.
+
+\bibitem{brown2020gpt3}
+Brown, Tom B., et al. \emph{Language Models are Few-Shot Learners}. Advances in Neural Information Processing Systems 33 (NeurIPS), 2020. \href{https://arxiv.org/abs/2005.14165}{arXiv:2005.14165}.
+
+\bibitem{vaswani2017attention}
+Vaswani, Ashish, et al. \emph{Attention Is All You Need}. NeurIPS 2017. \href{https://arxiv.org/abs/1706.03762}{arXiv:1706.03762}.
+
+\bibitem{bishop2006prml}
+Bishop, Christopher M. \emph{Pattern Recognition and Machine Learning}. Springer, 2006. \href{https://doi.org/10.1007/978-0-387-31073-2}{doi:10.1007/978-0-387-31073-2}.
+
+\end{thebibliography}
+
+
+\end{document}
+
+
+% === Inserted: one-screen summary of train/freeze by variant (as implemented) ===
+\begin{table}[t]
+\centering
+\begin{tabular}{l l p{0.40\linewidth} p{0.40\linewidth}}
+\textbf{Variant} & \textbf{Load} & \textbf{Trainable} & \textbf{Frozen} \\\hline
+V1 (``middle-block'') & 4-bit base & \texttt{lm\_head} only (unfreezing middle blocks has no effect under 4-bit) & Embeddings; all transformer blocks (4-bit) \\
+V2 (QLoRA) & 4-bit + LoRA & LoRA $A/B$ on $q/k/v/o$ and gate/up/down in \emph{all} layers; (optional) \texttt{lm\_head} & Base weights everywhere; no middle-slice restriction \\
+V3 (head-only) & 4-bit & \texttt{lm\_head} only & Everything else \\
+V3 (top-2 LoRA, optional) & 4-bit + LoRA & LoRA $A/B$ on target projections in last 2 layers; (optional) \texttt{lm\_head} & Base and adapters outside top-2 \\
+\end{tabular}
+\end{table}
+% === End summary table ===
+
