@@ -304,11 +304,26 @@ class TrainConfig:
     bf16: bool | None = None
     logging_steps: int = 10
     save_strategy: str = "no"
+    max_steps: int | None = None
+    train_limit: int | None = None
+    valid_limit: int | None = None
 
 
-def make_dataset(tokenizer, train_path, valid_path, max_length):
+def make_dataset(
+    tokenizer,
+    train_path,
+    valid_path,
+    max_length,
+    *,
+    train_limit: int | None = None,
+    valid_limit: int | None = None,
+):
     train_records = load_jsonl_pair(train_path)
     valid_records = load_jsonl_pair(valid_path)
+    if train_limit is not None:
+        train_records = train_records[:train_limit]
+    if valid_limit is not None:
+        valid_records = valid_records[:valid_limit]
     train_dataset = tokenize_with_prompt_mask(train_records, tokenizer, max_len=max_length)
     valid_dataset = tokenize_with_prompt_mask(valid_records, tokenizer, max_len=max_length)
     return train_dataset, valid_dataset
@@ -329,6 +344,8 @@ def run_trainer(model, tokenizer, train_ds, valid_ds, cfg: TrainConfig, extra_kw
         save_strategy=cfg.save_strategy,
         report_to="none",
     )
+    if cfg.max_steps is not None:
+        args_kwargs["max_steps"] = cfg.max_steps
     if "eval_strategy" in training_args_sig.parameters:
         args_kwargs["eval_strategy"] = "no"
     else:

@@ -22,6 +22,9 @@ def main(
     bs=1,
     accum=16,
     lr=1e-5,
+    max_steps=None,
+    train_limit=None,
+    valid_limit=None,
 ):
     tokenizer = load_tokenizer(model_id)
     model = load_fp_model(model_id)
@@ -52,10 +55,18 @@ def main(
         per_device_train_batch_size=bs,
         gradient_accumulation_steps=accum,
         learning_rate=lr,
+        max_steps=max_steps,
+        train_limit=train_limit,
+        valid_limit=valid_limit,
     )
 
     train_dataset, valid_dataset = make_dataset(
-        tokenizer, train_path, valid_path, max_length
+        tokenizer,
+        train_path,
+        valid_path,
+        max_length,
+        train_limit=train_limit,
+        valid_limit=valid_limit,
     )
     stats = run_trainer(model, tokenizer, train_dataset, valid_dataset, config)
     print("Efficiency:", stats)
@@ -72,5 +83,8 @@ if __name__ == "__main__":
     parser.add_argument("--bs", type=int, default=1)
     parser.add_argument("--accum", type=int, default=16)
     parser.add_argument("--lr", type=float, default=1e-5)
+    parser.add_argument("--max_steps", type=int)
+    parser.add_argument("--train_limit", type=int)
+    parser.add_argument("--valid_limit", type=int)
     args = parser.parse_args()
     main(**vars(args))
