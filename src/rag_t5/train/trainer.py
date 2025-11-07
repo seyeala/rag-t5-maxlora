@@ -70,9 +70,9 @@ def train(config: TrainConfig):
 
     Returns
     -------
-    dict
-        A dictionary of efficiency statistics produced by
-        :func:`train.common.run_trainer`.
+    model, tokenizer, dict
+        The fine-tuned model, its tokenizer and a dictionary of efficiency
+        statistics produced by :func:`train.common.run_trainer`.
     """
 
     use_bf16 = resolve_bf16(config.bf16)
@@ -113,7 +113,11 @@ def train(config: TrainConfig):
         tokenizer, config.train_path, config.valid_path, config.max_length
     )
 
-    return run_trainer(model, tokenizer, train_dataset, valid_dataset, trainer_config)
+    efficiency = run_trainer(
+        model, tokenizer, train_dataset, valid_dataset, trainer_config
+    )
+
+    return model, tokenizer, efficiency
 
 
 __all__ = ["TrainConfig", "train"]
