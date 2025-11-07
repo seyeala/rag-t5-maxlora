@@ -34,7 +34,7 @@ def main(
     if not adapter_path:
         raise typer.BadParameter(
             "Provide the path to the fine-tuned LoRA adapter via --adapter or the config.",
-            param_name="adapter",
+            param_hint="--adapter",
         )
 
     model, tok, device = load_base(cfg.base_model)
@@ -50,9 +50,9 @@ def main(
             ),
         )
     except FileNotFoundError as exc:
-        raise typer.BadParameter(str(exc), param_name="adapter") from exc
+        raise typer.BadParameter(str(exc), param_hint="--adapter") from exc
     except ValueError as exc:
-        raise typer.BadParameter(str(exc), param_name="adapter") from exc
+        raise typer.BadParameter(str(exc), param_hint="--adapter") from exc
     model.print_trainable_parameters()
 
     prompt = "translate English to German: The house is wonderful."
