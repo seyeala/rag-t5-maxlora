@@ -329,7 +329,17 @@ def make_dataset(
     return train_dataset, valid_dataset
 
 
-def run_trainer(model, tokenizer, train_ds, valid_ds, cfg: TrainConfig, extra_kwargs=None):
+def build_trainer(
+    model,
+    tokenizer,
+    train_ds,
+    valid_ds,
+    cfg: TrainConfig,
+    *,
+    report_to: str = "none",
+):
+    """Construct a :class:`~transformers.Trainer` for the provided inputs."""
+
     collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
     training_args_sig = inspect.signature(TrainingArguments.__init__)
     use_bf16 = resolve_bf16(cfg.bf16)
@@ -342,7 +352,7 @@ def run_trainer(model, tokenizer, train_ds, valid_ds, cfg: TrainConfig, extra_kw
         bf16=use_bf16,
         logging_steps=cfg.logging_steps,
         save_strategy=cfg.save_strategy,
-        report_to="none",
+        report_to=report_to,
     )
     if cfg.max_steps is not None:
         args_kwargs["max_steps"] = cfg.max_steps
@@ -365,6 +375,11 @@ def run_trainer(model, tokenizer, train_ds, valid_ds, cfg: TrainConfig, extra_kw
     else:
         trainer_kwargs["tokenizer"] = tokenizer
     trainer = Trainer(**trainer_kwargs)
+    return trainer, args
+
+
+def run_trainer(model, tokenizer, train_ds, valid_ds, cfg: TrainConfig, extra_kwargs=None):
+    trainer, _ = build_trainer(model, tokenizer, train_ds, valid_ds, cfg)
     reset_vram()
     start = time.time()
     trainer.train()
