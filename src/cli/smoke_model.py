@@ -30,17 +30,29 @@ def main(
     set_seed(42)
     cfg = load_settings(config, override)
 
+    adapter_path = adapter or cfg.lora.adapter_path
+    if not adapter_path:
+        raise typer.BadParameter(
+            "Provide the path to the fine-tuned LoRA adapter via --adapter or the config.",
+            param_name="adapter",
+        )
+
     model, tok, device = load_base(cfg.base_model)
-    model = apply_lora(
-        model,
-        LoraArgs(
-            r=cfg.lora.r,
-            alpha=cfg.lora.alpha,
-            dropout=cfg.lora.dropout,
-            target_modules=cfg.lora.target_modules,
-            adapter_path=adapter or cfg.lora.adapter_path,
-        ),
-    )
+    try:
+        model = apply_lora(
+            model,
+            LoraArgs(
+                r=cfg.lora.r,
+                alpha=cfg.lora.alpha,
+                dropout=cfg.lora.dropout,
+                target_modules=cfg.lora.target_modules,
+                adapter_path=adapter_path,
+            ),
+        )
+    except FileNotFoundError as exc:
+        raise typer.BadParameter(str(exc), param_name="adapter") from exc
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_name="adapter") from exc
     model.print_trainable_parameters()
 
     prompt = "translate English to German: The house is wonderful."
