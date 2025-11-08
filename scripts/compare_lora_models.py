@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Iterable, Sequence
+from os import PathLike
 from pathlib import Path
-from typing import Iterable, List, Sequence, Tuple
+from typing import List, Tuple
 
 import gradio as gr
 import torch
@@ -108,12 +110,23 @@ def compare_models(
     return tuple(outputs)
 
 
+def _ensure_iterable_paths(
+    adapter_dirs: Iterable[str | PathLike[str]] | str | PathLike[str],
+) -> Iterable[str | PathLike[str]]:
+    """Normalize adapter inputs to an iterable of paths."""
+
+    if isinstance(adapter_dirs, (str, PathLike)):
+        return [adapter_dirs]
+    return adapter_dirs
+
+
 def build_demo(
-    adapter_dirs: Iterable[str],
+    adapter_dirs: Iterable[str | PathLike[str]] | str | PathLike[str],
     *,
     base_model_id: str | None = None,
 ) -> gr.Blocks:
-    adapter_paths = [Path(path) for path in adapter_dirs]
+    normalized_dirs = _ensure_iterable_paths(adapter_dirs)
+    adapter_paths = [Path(path) for path in normalized_dirs]
     bundles, device = _load_models(adapter_paths, base_model_id=base_model_id)
 
     with gr.Blocks() as demo:
