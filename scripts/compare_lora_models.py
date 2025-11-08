@@ -14,7 +14,6 @@ from peft import PeftConfig, PeftModel
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
 from apps.gradio_chat import _format_prompt
-from rag_t5.config import load_settings
 from rag_t5.models.loader import load_base
 
 
@@ -51,17 +50,34 @@ def _resolve_base_model_id(
     if explicit_base:
         return explicit_base
 
+    missing_configs: list[Path] = []
     for adapter_dir in adapter_dirs:
         try:
             config = PeftConfig.from_pretrained(adapter_dir)
         except (OSError, ValueError):
-            # Skip directories that are missing a valid PEFT config. They'll be
-            # surfaced later when we actually try to load them.
+            # Track directories that are missing a valid PEFT config so we can
+            # raise a helpful error message if none of the adapters specify the
+            # base model they were trained from.
+            missing_configs.append(adapter_dir)
             continue
         return config.base_model_name_or_path
 
-    cfg = load_settings("configs/defaults.toml")
-    return cfg.base_model
+    searched = ", ".join(str(path) for path in adapter_dirs)
+    if missing_configs:
+        missing = ", ".join(str(path) for path in missing_configs)
+        raise ValueError(
+            "Unable to infer the baseline model because the following adapter "
+            f"directories are missing a PEFT config: {missing}. "
+            "Pass `base_model_id` to build_demo()/compare_lora_models.py to "
+            "explicitly specify the base model."
+        )
+
+    raise ValueError(
+        "Unable to infer the baseline model from the provided adapter "
+        f"directories ({searched}). Pass `base_model_id` to "
+        "build_demo()/compare_lora_models.py to explicitly specify the base "
+        "model."
+    )
 
 
 def _load_models(
