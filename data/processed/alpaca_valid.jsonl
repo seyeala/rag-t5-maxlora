@@ -1,17 +1,17 @@
 {"prompt": "What is the capital of Mexico?", "answer": "Mexico City"}
 {"prompt": "Which country is Cape Town in?", "answer": "South Africa"}
 {"prompt": "What is the capital of India?", "answer": "New Delhi"}
-{"prompt": "Which country does S\u00e3o Paulo belong to?", "answer": "Brazil"}
-{"question": "Which planet has the Great Red Spot?", "answer": "Jupiter"}
-{"question": "What is d/dx [sin(x)]?", "answer": "cos(x)"}
-{"question": "Solve for x: 3^(x+2) = 27^(x-1).", "answer": "x = 2.5"}
-{"question": "Evaluate the sum 17 + 21 + 25 + ... + 197.", "answer": "4,922"}
-{"question": "Simplify (x^2 − 9)/(x − 3), for x ≠ 3.", "answer": "x + 3"}
-{"question": "Find all real roots of f(x) = x^3 − 6x^2 + 11x − 6.", "answer": "x = 1, 2, 3"}
-{"question": "A circle of radius r is inscribed in a square. What fraction of the square’s area is occupied by the circle?", "answer": "π/4 (≈ 0.7854)"}
-{"question": "You have two ropes that each burn for exactly 1 hour but at non-uniform rates. How can you measure 45 minutes?", "answer": "Light Rope A at both ends and Rope B at one end; when A finishes (30 min), light B’s other end; when B finishes (15 min later), 45 minutes have passed."}
-{"question": "You have 12 balls identical in appearance, but one is heavier. Using a balance scale, how can you find the heavier ball in 3 weighings?", "answer": "Weigh 4 vs 4. If unbalanced, weigh 2 vs 2 from the heavier group; then 1 vs 1. If first 4 vs 4 balances, weigh 3 vs 3 of the remaining 4; if unbalanced the heavier side contains it; else the leftover ball is heavier."}
-{"question": "A glass is filled to the brim with water and floating ice. After the ice melts, is the water level higher, lower, or the same?", "answer": "The same."},
-{"question": "Which weighs more: a kilogram of feathers or a kilogram of steel?", "answer": "They weigh the same."}
-{"question": "What is the 100th digit in the decimal expansion of 1/7?", "answer": "8"}
-{"question": "Compute 2^100 mod 7.", "answer": "2"}
+{"prompt": "Which country does São Paulo belong to?", "answer": "Brazil"}
+{"answer": "Jupiter", "prompt": "Which planet has the Great Red Spot?"}
+{"answer": "cos(x)", "prompt": "What is d/dx [sin(x)]?"}
+{"answer": "x = 2.5", "prompt": "Solve for x: 3^(x+2) = 27^(x-1)."}
+{"answer": "4,922", "prompt": "Evaluate the sum 17 + 21 + 25 + ... + 197."}
+{"answer": "x + 3", "prompt": "Simplify (x^2 − 9)/(x − 3), for x ≠ 3."}
+{"answer": "x = 1, 2, 3", "prompt": "Find all real roots of f(x) = x^3 − 6x^2 + 11x − 6."}
+{"answer": "π/4 (≈ 0.7854)", "prompt": "A circle of radius r is inscribed in a square. What fraction of the square’s area is occupied by the circle?"}
+{"answer": "Light Rope A at both ends and Rope B at one end; when A finishes (30 min), light B’s other end; when B finishes (15 min later), 45 minutes have passed.", "prompt": "You have two ropes that each burn for exactly 1 hour but at non-uniform rates. How can you measure 45 minutes?"}
+{"answer": "Weigh 4 vs 4. If unbalanced, weigh 2 vs 2 from the heavier group; then 1 vs 1. If first 4 vs 4 balances, weigh 3 vs 3 of the remaining 4; if unbalanced the heavier side contains it; else the leftover ball is heavier.", "prompt": "You have 12 balls identical in appearance, but one is heavier. Using a balance scale, how can you find the heavier ball in 3 weighings?"}
+{"answer": "The same.", "prompt": "A glass is filled to the brim with water and floating ice. After the ice melts, is the water level higher, lower, or the same?"}
+{"answer": "They weigh the same.", "prompt": "Which weighs more: a kilogram of feathers or a kilogram of steel?"}
+{"answer": "8", "prompt": "What is the 100th digit in the decimal expansion of 1/7?"}
+{"answer": "2", "prompt": "Compute 2^100 mod 7."}
