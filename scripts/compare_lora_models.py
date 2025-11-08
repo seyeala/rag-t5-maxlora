@@ -42,13 +42,34 @@ def _load_adapter(
     return label, model, tokenizer
 
 
+def _resolve_base_model_id(
+    adapter_dirs: Sequence[Path],
+    explicit_base: str | None,
+) -> str:
+    """Return the base model ID to use for the baseline column."""
+
+    if explicit_base:
+        return explicit_base
+
+    for adapter_dir in adapter_dirs:
+        try:
+            config = PeftConfig.from_pretrained(adapter_dir)
+        except (OSError, ValueError):
+            # Skip directories that are missing a valid PEFT config. They'll be
+            # surfaced later when we actually try to load them.
+            continue
+        return config.base_model_name_or_path
+
+    cfg = load_settings("configs/defaults.toml")
+    return cfg.base_model
+
+
 def _load_models(
     adapter_dirs: Sequence[Path],
     *,
     base_model_id: str | None = None,
 ) -> Tuple[List[ModelBundle], str]:
-    cfg = load_settings("configs/defaults.toml")
-    target_base = base_model_id or cfg.base_model
+    target_base = _resolve_base_model_id(adapter_dirs, base_model_id)
     base_model, base_tokenizer, device = load_base(target_base)
     base_model.eval()
     dtype = next(base_model.parameters()).dtype
@@ -127,6 +148,8 @@ def build_demo(
 ) -> gr.Blocks:
     normalized_dirs = _ensure_iterable_paths(adapter_dirs)
     adapter_paths = [Path(path) for path in normalized_dirs]
+    if not adapter_paths:
+        raise ValueError("At least one adapter directory is required to build the demo.")
     bundles, device = _load_models(adapter_paths, base_model_id=base_model_id)
 
     with gr.Blocks() as demo:
