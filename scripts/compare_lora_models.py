@@ -108,8 +108,11 @@ def _generate_text(
     inputs = tokenizer(prompt, return_tensors="pt").to(device)
     with torch.inference_mode():
         output = model.generate(**inputs, **generation_kwargs)
-    generated = output[0][inputs["input_ids"].shape[1] :]
-    return tokenizer.decode(generated, skip_special_tokens=True).strip()
+    if getattr(model.config, "is_encoder_decoder", False):
+        generated_ids = output[0]
+    else:
+        generated_ids = output[0][inputs["input_ids"].shape[1] :]
+    return tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
 
 
 def compare_models(
