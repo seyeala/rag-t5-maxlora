@@ -9,6 +9,7 @@ train`` without worrying about the internal project layout.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Sequence
 
 import torch
@@ -17,6 +18,7 @@ from train.common import (
     LoRA_TARGETS_ATT_MLP,
     TrainConfig as _TrainerConfig,
     apply_lora_everywhere,
+    count_trainable_params,
     freeze_lora_outside,
     get_num_layers_and_attr,
     last_n_indices,
@@ -39,8 +41,8 @@ class TrainConfig:
     """
 
     model_id: str
-    train_path: str
-    valid_path: str
+    train_path: str | None
+    valid_path: str | None
     out_dir: str
     max_length: int = 512
     num_train_epochs: float = 1.0
@@ -79,6 +81,20 @@ def train(config: TrainConfig):
     tokenizer = load_tokenizer(config.model_id)
     model_dtype = torch.bfloat16 if use_bf16 else torch.float32
     model = load_fp_model(config.model_id, dtype=model_dtype)
+
+    if config.train_path is None and config.valid_path is None:
+        Path(config.out_dir).mkdir(parents=True, exist_ok=True)
+        model.save_pretrained(config.out_dir)
+        tokenizer.save_pretrained(config.out_dir)
+        trainable, pct = count_trainable_params(model)
+        efficiency = {
+            "trainable_params": trainable,
+            "trainable_pct": pct,
+            "peak_vram_gb": 0.0,
+            "wall_time_s": 0.0,
+        }
+        return model, tokenizer, efficiency
+
     model = apply_lora_everywhere(
         model,
         r=config.lora_r,
