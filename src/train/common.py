@@ -318,8 +318,8 @@ def make_dataset(
     train_limit: int | None = None,
     valid_limit: int | None = None,
 ):
-    train_records = load_jsonl_pair(train_path)
-    valid_records = load_jsonl_pair(valid_path)
+    train_records = load_jsonl_pair(train_path) if train_path is not None else []
+    valid_records = load_jsonl_pair(valid_path) if valid_path is not None else []
     if train_limit is not None:
         train_records = train_records[:train_limit]
     if valid_limit is not None:
