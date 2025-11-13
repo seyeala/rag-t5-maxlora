@@ -96,6 +96,9 @@ class TrainConfig:
         else:
             self.num_train_epochs = float(self.epochs)
 
+        if self.load_best_model_at_end and self.save_strategy == "no":
+            self.save_strategy = self.evaluation_strategy
+
     @classmethod
     def from_app_config(
         cls,
