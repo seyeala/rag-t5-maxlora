@@ -311,6 +311,7 @@ class TrainConfig:
     logging_steps: int = 10
     save_strategy: str = "no"
     max_steps: int | None = None
+    overwrite_output_dir: bool = False
     train_limit: int | None = None
     valid_limit: int | None = None
 
@@ -351,6 +352,7 @@ def build_trainer(
     use_bf16 = resolve_bf16(cfg.bf16)
     args_kwargs = dict(
         output_dir=cfg.out_dir,
+        overwrite_output_dir=cfg.overwrite_output_dir,
         per_device_train_batch_size=cfg.per_device_train_batch_size,
         gradient_accumulation_steps=cfg.gradient_accumulation_steps,
         learning_rate=cfg.learning_rate,

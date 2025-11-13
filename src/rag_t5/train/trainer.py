@@ -60,6 +60,8 @@ class TrainConfig:
     bf16: bool | None = None
     logging_steps: int = 10
     save_strategy: str = "no"
+    max_steps: int | None = None
+    overwrite_output_dir: bool = False
     lora_r: int = 16
     lora_alpha: int = 32
     lora_dropout: float = 0.05
@@ -207,6 +209,8 @@ def train(config: TrainConfig):
         bf16=use_bf16,
         logging_steps=config.logging_steps,
         save_strategy=config.save_strategy,
+        max_steps=config.max_steps,
+        overwrite_output_dir=config.overwrite_output_dir,
     )
 
     train_dataset, valid_dataset = make_dataset(
