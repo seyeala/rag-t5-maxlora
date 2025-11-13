@@ -62,6 +62,13 @@ class TrainConfig:
     save_strategy: str = "no"
     max_steps: int | None = None
     overwrite_output_dir: bool = False
+    evaluation_strategy: str = "no"
+    eval_steps: int | None = None
+    load_best_model_at_end: bool = False
+    metric_for_best_model: str | None = None
+    greater_is_better: bool | None = None
+    early_stopping_patience: int | None = None
+    early_stopping_threshold: float = 0.0
     lora_r: int = 16
     lora_alpha: int = 32
     lora_dropout: float = 0.05
@@ -211,6 +218,13 @@ def train(config: TrainConfig):
         save_strategy=config.save_strategy,
         max_steps=config.max_steps,
         overwrite_output_dir=config.overwrite_output_dir,
+        evaluation_strategy=config.evaluation_strategy,
+        eval_steps=config.eval_steps,
+        load_best_model_at_end=config.load_best_model_at_end,
+        metric_for_best_model=config.metric_for_best_model,
+        greater_is_better=config.greater_is_better,
+        early_stopping_patience=config.early_stopping_patience,
+        early_stopping_threshold=config.early_stopping_threshold,
     )
 
     train_dataset, valid_dataset = make_dataset(
