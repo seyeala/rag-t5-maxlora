@@ -22,7 +22,7 @@ target_modules = ["q","k","v","o","wi_0","wi_1","wo"]
 [train]
 task = "sft"
 lr = 0.0005
-epochs = 3
+epochs = 30
 batch_size = 8
 grad_accum = 2
 weight_decay = 0.01
