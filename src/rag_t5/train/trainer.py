@@ -14,6 +14,8 @@ from typing import Sequence
 
 import torch
 
+from rag_t5.config import AppCfg
+
 from train.common import (
     LoRA_TARGETS_ATT_MLP,
     TrainConfig as _TrainerConfig,
@@ -65,6 +67,57 @@ class TrainConfig:
         default_factory=lambda: tuple(LoRA_TARGETS_ATT_MLP)
     )
     last_n_lora_layers: int | None = 2
+
+    @classmethod
+    def from_app_config(
+        cls,
+        settings: AppCfg,
+        *,
+        train_path: str,
+        valid_path: str | None,
+        out_dir: str,
+        **overrides,
+    ) -> "TrainConfig":
+        """Build a :class:`TrainConfig` from :func:`rag_t5.config.load_settings` output.
+
+        Parameters
+        ----------
+        settings:
+            Parsed application configuration returned by
+            :func:`rag_t5.config.load_settings`.
+        train_path, valid_path, out_dir:
+            Dataset paths and output directory passed through to the trainer.
+        overrides:
+            Additional keyword arguments that override values resolved from the
+            config (e.g. ``num_train_epochs=5``).
+        """
+
+        train_cfg = settings.train
+        lora_cfg = settings.lora
+
+        resolved = dict(
+            model_id=train_cfg.model_id or settings.base_model,
+            train_path=train_path,
+            valid_path=valid_path,
+            out_dir=out_dir,
+            max_length=train_cfg.src_max_len,
+            num_train_epochs=float(train_cfg.epochs),
+            per_device_train_batch_size=train_cfg.batch_size,
+            gradient_accumulation_steps=train_cfg.grad_accum,
+            learning_rate=train_cfg.lr,
+            weight_decay=train_cfg.weight_decay,
+            warmup_ratio=train_cfg.warmup_ratio,
+            label_smoothing_factor=train_cfg.label_smoothing,
+            gradient_checkpointing=train_cfg.gradient_checkpointing,
+            lora_r=lora_cfg.r,
+            lora_alpha=lora_cfg.alpha,
+            lora_dropout=lora_cfg.dropout,
+            lora_targets=tuple(lora_cfg.target_modules),
+        )
+
+        resolved.update(overrides)
+
+        return cls(**resolved)
 
 
 def train(config: TrainConfig):
