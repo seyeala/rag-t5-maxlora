@@ -140,6 +140,23 @@ The script will download and use the specified HuggingFace model:contentReferenc
 
 \emph{Training time:} On a modern single GPU, one epoch on 50k examples (with above defaults) might take a few hours. QLoRA (v2) uses 4-bit precision to reduce memory, allowing larger models or batches on a given GPU.
 
+\subsection*{Programmatic Fine-Tuning}
+When launching experiments from a notebook or custom Python script you can reuse the same hyperparameters defined in \texttt{configs/defaults.toml}. The helper :py:meth:`rag\_t5.train.TrainConfig.from\_app\_config` takes the object returned by :py:func:`rag\_t5.config.load\_settings` and constructs a trainer configuration that respects the epochs, batch size, learning rate, and LoRA settings from the TOML file. Example:
+\begin{lstlisting}[language=Python]
+from rag_t5.config import load_settings
+from rag_t5.train import TrainConfig, train
+
+cfg = load_settings("configs/defaults.toml")
+trainer_cfg = TrainConfig.from_app_config(
+    cfg,
+    train_path="data/processed/alpaca_train.jsonl",
+    valid_path="data/processed/alpaca_valid.jsonl",
+    out_dir="artifacts/models/sft",
+)
+train(trainer_cfg)
+\end{lstlisting}
+You can still override individual hyperparameters (for instance pass ``num_train_epochs=5``) while keeping every other option synchronized with the config file.
+
 \section{Evaluation}
 After training, evaluate the model on validation data or other benchmarks:
 
