@@ -67,6 +67,25 @@ class TrainConfig:
         default_factory=lambda: tuple(LoRA_TARGETS_ATT_MLP)
     )
     last_n_lora_layers: int | None = 2
+    epochs: float | None = None
+
+    def __post_init__(self) -> None:
+        """Normalise epoch aliases.
+
+        ``TrainConfig`` historically exposed the ``num_train_epochs`` argument
+        from :class:`transformers.TrainingArguments`, however external scripts
+        often try to pass ``epochs`` because that is how the application
+        configuration names the field.  Supporting the alias keeps that
+        experience ergonomic without requiring users to remember the
+        underlying ``transformers`` terminology.
+        """
+
+        if self.epochs is None:
+            # Keep the attribute in sync so ``config.epochs`` is always
+            # available to downstream code.
+            self.epochs = float(self.num_train_epochs)
+        else:
+            self.num_train_epochs = float(self.epochs)
 
     @classmethod
     def from_app_config(
