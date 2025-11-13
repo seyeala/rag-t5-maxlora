@@ -301,6 +301,12 @@ class TrainConfig:
     gradient_accumulation_steps: int = 16
     num_train_epochs: float = 1.0
     learning_rate: float = 2e-4
+    weight_decay: float = 0.0
+    warmup_ratio: float = 0.0
+    label_smoothing_factor: float = 0.0
+    gradient_checkpointing: bool = False
+    optim: str | None = None
+    lr_scheduler_type: str | None = None
     bf16: bool | None = None
     logging_steps: int = 10
     save_strategy: str = "no"
@@ -349,11 +355,19 @@ def build_trainer(
         gradient_accumulation_steps=cfg.gradient_accumulation_steps,
         learning_rate=cfg.learning_rate,
         num_train_epochs=cfg.num_train_epochs,
+        weight_decay=cfg.weight_decay,
+        warmup_ratio=cfg.warmup_ratio,
+        label_smoothing_factor=cfg.label_smoothing_factor,
+        gradient_checkpointing=cfg.gradient_checkpointing,
         bf16=use_bf16,
         logging_steps=cfg.logging_steps,
         save_strategy=cfg.save_strategy,
         report_to=report_to,
     )
+    if cfg.optim:
+        args_kwargs["optim"] = cfg.optim
+    if cfg.lr_scheduler_type:
+        args_kwargs["lr_scheduler_type"] = cfg.lr_scheduler_type
     if cfg.max_steps is not None:
         args_kwargs["max_steps"] = cfg.max_steps
     if "eval_strategy" in training_args_sig.parameters:

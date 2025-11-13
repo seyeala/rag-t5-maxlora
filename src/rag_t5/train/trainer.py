@@ -49,6 +49,12 @@ class TrainConfig:
     per_device_train_batch_size: int = 1
     gradient_accumulation_steps: int = 16
     learning_rate: float = 2e-4
+    weight_decay: float = 0.0
+    warmup_ratio: float = 0.0
+    label_smoothing_factor: float = 0.0
+    gradient_checkpointing: bool = False
+    optim: str | None = None
+    lr_scheduler_type: str | None = None
     bf16: bool | None = None
     logging_steps: int = 10
     save_strategy: str = "no"
@@ -120,6 +126,12 @@ def train(config: TrainConfig):
         gradient_accumulation_steps=config.gradient_accumulation_steps,
         num_train_epochs=config.num_train_epochs,
         learning_rate=config.learning_rate,
+        weight_decay=config.weight_decay,
+        warmup_ratio=config.warmup_ratio,
+        label_smoothing_factor=config.label_smoothing_factor,
+        gradient_checkpointing=config.gradient_checkpointing,
+        optim=config.optim,
+        lr_scheduler_type=config.lr_scheduler_type,
         bf16=use_bf16,
         logging_steps=config.logging_steps,
         save_strategy=config.save_strategy,
