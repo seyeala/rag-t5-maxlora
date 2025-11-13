@@ -21,6 +21,7 @@ from transformers import (
     AutoTokenizer,
     BitsAndBytesConfig,
     DataCollatorForLanguageModeling,
+    EarlyStoppingCallback,
     Trainer,
     TrainingArguments,
 )
@@ -312,6 +313,13 @@ class TrainConfig:
     save_strategy: str = "no"
     max_steps: int | None = None
     overwrite_output_dir: bool = False
+    evaluation_strategy: str = "no"
+    eval_steps: int | None = None
+    load_best_model_at_end: bool = False
+    metric_for_best_model: str | None = None
+    greater_is_better: bool | None = None
+    early_stopping_patience: int | None = None
+    early_stopping_threshold: float = 0.0
     train_limit: int | None = None
     valid_limit: int | None = None
 
@@ -350,6 +358,24 @@ def build_trainer(
     collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
     training_args_sig = inspect.signature(TrainingArguments.__init__)
     use_bf16 = resolve_bf16(cfg.bf16)
+    eval_key = (
+        "eval_strategy"
+        if "eval_strategy" in training_args_sig.parameters
+        else "evaluation_strategy"
+    )
+
+    metric_for_best_model = cfg.metric_for_best_model
+    greater_is_better = cfg.greater_is_better
+    if cfg.evaluation_strategy and cfg.evaluation_strategy.lower() != "no":
+        if metric_for_best_model is None:
+            metric_for_best_model = "eval_loss"
+        if greater_is_better is None and metric_for_best_model == "eval_loss":
+            greater_is_better = False
+
+    load_best_model_at_end = (
+        cfg.load_best_model_at_end or cfg.early_stopping_patience is not None
+    )
+
     args_kwargs = dict(
         output_dir=cfg.out_dir,
         overwrite_output_dir=cfg.overwrite_output_dir,
@@ -365,17 +391,21 @@ def build_trainer(
         logging_steps=cfg.logging_steps,
         save_strategy=cfg.save_strategy,
         report_to=report_to,
+        load_best_model_at_end=load_best_model_at_end,
     )
+    args_kwargs[eval_key] = cfg.evaluation_strategy
     if cfg.optim:
         args_kwargs["optim"] = cfg.optim
     if cfg.lr_scheduler_type:
         args_kwargs["lr_scheduler_type"] = cfg.lr_scheduler_type
     if cfg.max_steps is not None:
         args_kwargs["max_steps"] = cfg.max_steps
-    if "eval_strategy" in training_args_sig.parameters:
-        args_kwargs["eval_strategy"] = "no"
-    else:
-        args_kwargs["evaluation_strategy"] = "no"
+    if cfg.eval_steps is not None:
+        args_kwargs["eval_steps"] = cfg.eval_steps
+    if metric_for_best_model is not None:
+        args_kwargs["metric_for_best_model"] = metric_for_best_model
+    if greater_is_better is not None:
+        args_kwargs["greater_is_better"] = greater_is_better
 
     args = TrainingArguments(**args_kwargs)
     trainer_kwargs = dict(
@@ -394,14 +424,50 @@ def build_trainer(
     return trainer, args
 
 
+def _extract_loss_history(log_history):
+    history = {"train": [], "eval": []}
+    for entry in log_history:
+        if "loss" in entry and "learning_rate" in entry:
+            history["train"].append(
+                {
+                    "step": entry.get("step"),
+                    "epoch": entry.get("epoch"),
+                    "loss": entry["loss"],
+                }
+            )
+        if "eval_loss" in entry:
+            history["eval"].append(
+                {
+                    "step": entry.get("step"),
+                    "epoch": entry.get("epoch"),
+                    "loss": entry["eval_loss"],
+                }
+            )
+    return history
+
+
 def run_trainer(model, tokenizer, train_ds, valid_ds, cfg: TrainConfig, extra_kwargs=None):
     trainer, _ = build_trainer(model, tokenizer, train_ds, valid_ds, cfg)
+    if cfg.early_stopping_patience is not None:
+        if not valid_ds:
+            raise ValueError("Early stopping requires a validation dataset.")
+        if not cfg.evaluation_strategy or cfg.evaluation_strategy.lower() == "no":
+            raise ValueError(
+                "Early stopping requires evaluation_strategy to be enabled."
+            )
+        trainer.add_callback(
+            EarlyStoppingCallback(
+                early_stopping_patience=cfg.early_stopping_patience,
+                early_stopping_threshold=cfg.early_stopping_threshold,
+            )
+        )
     reset_vram()
     start = time.time()
-    trainer.train()
+    train_output = trainer.train()
     wall = time.time() - start
     vram = peak_vram_gb()
     trainable, pct = count_trainable_params(model)
+    loss_history = _extract_loss_history(trainer.state.log_history)
 
     Path(cfg.out_dir).mkdir(parents=True, exist_ok=True)
     efficiency = {
@@ -409,6 +475,8 @@ def run_trainer(model, tokenizer, train_ds, valid_ds, cfg: TrainConfig, extra_kw
         "trainable_pct": pct,
         "peak_vram_gb": vram,
         "wall_time_s": wall,
+        "train_metrics": train_output.metrics,
+        "loss_history": loss_history,
     }
     with open(os.path.join(cfg.out_dir, "efficiency.json"), "w", encoding="utf-8") as fp:
         json.dump(efficiency, fp, indent=2)
