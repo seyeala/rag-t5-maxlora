@@ -157,6 +157,36 @@ train(trainer_cfg)
 \end{lstlisting}
 You can still override individual hyperparameters (for instance pass ``num_train_epochs=5``) while keeping every other option synchronized with the config file.
 
+For Colab-centric workflows where you want to run longer schedules, enable validation-driven early stopping, and capture the training/evaluation loss curves for plotting, you can construct \texttt{TrainConfig} directly and retrieve the loss history that \texttt{train} now returns:
+\begin{lstlisting}[language=Python]
+from rag_t5.config import load_settings
+from rag_t5.train.trainer import TrainConfig, train
+
+cfg = load_settings("configs/defaults.toml")
+
+trainer_cfg = TrainConfig(
+    model_id=cfg.train.model_id,
+    train_path="/content/rag-t5-maxlora/data/processed/alpaca_train.jsonl",
+    valid_path="/content/rag-t5-maxlora/data/processed/alpaca_valid.jsonl",
+    out_dir="/content/rag-t5-maxlora/outputs/run_001",
+    lora_targets=("q", "k", "v", "o", "wi_0", "wi_1", "wo"),
+    num_train_epochs=30,
+    max_steps=-1,
+    overwrite_output_dir=True,
+    evaluation_strategy="epoch",
+    load_best_model_at_end=True,
+    early_stopping_patience=2,
+    metric_for_best_model="eval_loss",
+    greater_is_better=False,
+)
+
+model, tokenizer, stats = train(trainer_cfg)
+
+import pandas as pd
+pd.DataFrame(stats["loss_history"]["eval"]).plot(x="step", y="loss", title="Eval loss")
+\end{lstlisting}
+This snippet mirrors the training helper used in the provided Colab notebooks and shows how to use the returned ``loss_history`` dictionary for downstream visualization.
+
 \section{Evaluation}
 After training, evaluate the model on validation data or other benchmarks:
 
