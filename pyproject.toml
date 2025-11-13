@@ -19,3 +19,4 @@ dev = []
 
 [project.scripts]
 smoke-model = "cli.smoke_model:app"
+train-model = "cli.train:app"
