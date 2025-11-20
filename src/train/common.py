@@ -72,28 +72,53 @@ def build_example(record):
 
 
 class PromptMaskedDataset(Dataset):
-    def __init__(self, records, tokenizer, max_len=512):
-        self.data = self._tokenize(records, tokenizer, max_len)
+    def __init__(self, records, tokenizer, max_len=512, *, is_encoder_decoder=False):
+        self.data = self._tokenize(records, tokenizer, max_len, is_encoder_decoder)
 
     @staticmethod
-    def _tokenize(records, tokenizer, max_len):
+    def _tokenize(records, tokenizer, max_len, is_encoder_decoder):
         input_ids, attention_mask, labels = [], [], []
         for record in records:
-            text, _ = build_example(record)
-            encoded = tokenizer(
-                text, truncation=True, max_length=max_len, padding="max_length"
-            )
-            ids = encoded["input_ids"]
-            mask = encoded["attention_mask"]
-            prompt_ids = tokenizer(
-                record["prompt"], truncation=True, max_length=max_len
-            )["input_ids"]
-            label_vec = ids.copy()
-            for idx in range(min(len(prompt_ids), len(label_vec))):
-                label_vec[idx] = -100
-            input_ids.append(ids)
-            attention_mask.append(mask)
-            labels.append(label_vec)
+            if is_encoder_decoder:
+                prompt_enc = tokenizer(
+                    record["prompt"],
+                    truncation=True,
+                    max_length=max_len,
+                    padding="max_length",
+                )
+                answer_enc = tokenizer(
+                    record["answer"],
+                    truncation=True,
+                    max_length=max_len,
+                    padding="max_length",
+                )
+                label_vec = [
+                    token if token != tokenizer.pad_token_id else -100
+                    for token in answer_enc["input_ids"]
+                ]
+                input_ids.append(prompt_enc["input_ids"])
+                attention_mask.append(prompt_enc["attention_mask"])
+                labels.append(label_vec)
+            else:
+                text, _ = build_example(record)
+                encoded = tokenizer(
+                    text, truncation=True, max_length=max_len, padding="max_length"
+                )
+                ids = encoded["input_ids"]
+                mask = encoded["attention_mask"]
+                prompt_ids = tokenizer(
+                    record["prompt"], truncation=True, max_length=max_len
+                )["input_ids"]
+                label_vec = ids.copy()
+                for idx in range(min(len(prompt_ids), len(label_vec))):
+                    label_vec[idx] = -100
+                label_vec = [
+                    token if token != tokenizer.pad_token_id else -100
+                    for token in label_vec
+                ]
+                input_ids.append(ids)
+                attention_mask.append(mask)
+                labels.append(label_vec)
         return {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
@@ -107,8 +132,10 @@ class PromptMaskedDataset(Dataset):
         return {key: value[idx] for key, value in self.data.items()}
 
 
-def tokenize_with_prompt_mask(records, tokenizer, max_len=512):
-    return PromptMaskedDataset(records, tokenizer, max_len)
+def tokenize_with_prompt_mask(records, tokenizer, max_len=512, *, is_encoder_decoder=False):
+    return PromptMaskedDataset(
+        records, tokenizer, max_len, is_encoder_decoder=is_encoder_decoder
+    )
 
 
 # -------------------- Model helpers --------------------
@@ -330,6 +357,7 @@ def make_dataset(
     valid_path,
     max_length,
     *,
+    is_encoder_decoder: bool = False,
     train_limit: int | None = None,
     valid_limit: int | None = None,
 ):
@@ -339,8 +367,18 @@ def make_dataset(
         train_records = train_records[:train_limit]
     if valid_limit is not None:
         valid_records = valid_records[:valid_limit]
-    train_dataset = tokenize_with_prompt_mask(train_records, tokenizer, max_len=max_length)
-    valid_dataset = tokenize_with_prompt_mask(valid_records, tokenizer, max_len=max_length)
+    train_dataset = tokenize_with_prompt_mask(
+        train_records,
+        tokenizer,
+        max_len=max_length,
+        is_encoder_decoder=is_encoder_decoder,
+    )
+    valid_dataset = tokenize_with_prompt_mask(
+        valid_records,
+        tokenizer,
+        max_len=max_length,
+        is_encoder_decoder=is_encoder_decoder,
+    )
     return train_dataset, valid_dataset
 
 

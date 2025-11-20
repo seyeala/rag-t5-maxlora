@@ -61,6 +61,7 @@ def main(
         train_path,
         valid_path,
         max_length,
+        is_encoder_decoder=model.config.is_encoder_decoder,
         train_limit=train_limit,
         valid_limit=valid_limit,
     )
