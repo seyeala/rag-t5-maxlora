@@ -41,9 +41,12 @@ def chat_fn(instruction: str, context: str):
     inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
     with torch.no_grad():
         output = model.generate(**inputs, max_new_tokens=256, do_sample=False)
-    generated = tokenizer.decode(
-        output[0][inputs["input_ids"].shape[1] :], skip_special_tokens=True
-    ).strip()
+    if getattr(model.config, "is_encoder_decoder", False):
+        decoded_tokens = output[0]
+    else:
+        decoded_tokens = output[0][inputs["input_ids"].shape[1] :]
+
+    generated = tokenizer.decode(decoded_tokens, skip_special_tokens=True).strip()
     return generated
 
 
