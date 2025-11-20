@@ -20,10 +20,10 @@ from transformers import (
     AutoModelForSeq2SeqLM,
     AutoTokenizer,
     BitsAndBytesConfig,
-    DataCollatorForLanguageModeling,
     EarlyStoppingCallback,
     Trainer,
     TrainingArguments,
+    default_data_collator,
 )
 
 try:
@@ -355,7 +355,12 @@ def build_trainer(
 ):
     """Construct a :class:`~transformers.Trainer` for the provided inputs."""
 
-    collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
+    # Use a no-op collator so that the ``labels`` vector produced by
+    # ``PromptMaskedDataset`` is preserved. ``DataCollatorForLanguageModeling``
+    # would rebuild ``labels`` from ``input_ids`` and discard the prompt mask,
+    # effectively training the model to copy its input instead of predicting the
+    # answer tokens.
+    collator = default_data_collator
     training_args_sig = inspect.signature(TrainingArguments.__init__)
     use_bf16 = resolve_bf16(cfg.bf16)
     eval_key = (
