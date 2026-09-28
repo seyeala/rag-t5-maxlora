@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Tuple
 
 import torch
-from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+from peft import LoraConfig, TaskType, get_peft_model, prepare_model_for_kbit_training
 from torch.utils.data import Dataset
 from transformers import (
     AutoConfig,
@@ -246,11 +246,14 @@ def _resolve_attr_path(model, path: str):
 
 
 def get_num_layers_and_attr(model) -> Tuple[int, str]:
-    for path in ("model.layers", "transformer.h"):
-        obj = _resolve_attr_path(model, path)
-        if obj is not None and hasattr(obj, "__len__"):
-            return len(obj), path
-    for path in ("encoder.block",):
+    for path in (
+        "model.layers",
+        "base_model.model.model.layers",
+        "transformer.h",
+        "base_model.model.transformer.h",
+        "encoder.block",
+        "base_model.model.encoder.block",
+    ):
         obj = _resolve_attr_path(model, path)
         if obj is not None and hasattr(obj, "__len__"):
             return len(obj), path
@@ -281,20 +284,44 @@ LoRA_TARGETS_ATT_MLP = [
 ]
 
 
+LoRA_TARGETS_T5 = ["q", "k", "v", "o", "wi_0", "wi_1", "wo"]
+
+
+def model_is_encoder_decoder(model) -> bool:
+    config = getattr(model, "config", None)
+    return bool(getattr(config, "is_encoder_decoder", False))
+
+
+def default_lora_targets(model):
+    if model_is_encoder_decoder(model):
+        return LoRA_TARGETS_T5
+    return LoRA_TARGETS_ATT_MLP
+
+
+def default_lora_task_type(model):
+    if model_is_encoder_decoder(model):
+        return TaskType.SEQ_2_SEQ_LM
+    return TaskType.CAUSAL_LM
+
+
 def apply_lora_everywhere(
-    model, r=16, alpha=32, dropout=0.05, targets=LoRA_TARGETS_ATT_MLP
+    model, r=16, alpha=32, dropout=0.05, targets=None, task_type=None
 ):
+    if targets is None:
+        targets = default_lora_targets(model)
+    if task_type is None:
+        task_type = default_lora_task_type(model)
     config = LoraConfig(
         r=r,
         lora_alpha=alpha,
         lora_dropout=dropout,
-        target_modules=targets,
-        task_type="CAUSAL_LM",
+        target_modules=list(targets),
+        task_type=task_type,
     )
     return get_peft_model(model, config)
 
 
-_LAYER_IDX_RE = re.compile(r"\.layers\.(\d+)\.")
+_LAYER_IDX_RE = re.compile(r"\.(?:layers|block)\.(\d+)\.")
 
 
 def freeze_lora_outside(model, allowed: set[int]):
@@ -450,6 +477,11 @@ def build_trainer(
     if greater_is_better is not None:
         args_kwargs["greater_is_better"] = greater_is_better
 
+    args_kwargs = {
+        key: value
+        for key, value in args_kwargs.items()
+        if key in training_args_sig.parameters
+    }
     args = TrainingArguments(**args_kwargs)
     trainer_kwargs = dict(
         model=model,

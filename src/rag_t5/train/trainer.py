@@ -8,7 +8,7 @@ train`` without worrying about the internal project layout.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
@@ -17,7 +17,6 @@ import torch
 from rag_t5.config import AppCfg
 
 from train.common import (
-    LoRA_TARGETS_ATT_MLP,
     TrainConfig as _TrainerConfig,
     apply_lora_everywhere,
     count_trainable_params,
@@ -72,9 +71,7 @@ class TrainConfig:
     lora_r: int = 16
     lora_alpha: int = 32
     lora_dropout: float = 0.05
-    lora_targets: Sequence[str] = field(
-        default_factory=lambda: tuple(LoRA_TARGETS_ATT_MLP)
-    )
+    lora_targets: Sequence[str] | None = None
     last_n_lora_layers: int | None = 2
     epochs: float | None = None
 
@@ -171,6 +168,7 @@ def train(config: TrainConfig):
     tokenizer = load_tokenizer(config.model_id)
     model_dtype = torch.bfloat16 if use_bf16 else torch.float32
     model = load_fp_model(config.model_id, dtype=model_dtype)
+    is_encoder_decoder = bool(getattr(model.config, "is_encoder_decoder", False))
 
     if config.train_path is None and config.valid_path is None:
         Path(config.out_dir).mkdir(parents=True, exist_ok=True)
@@ -190,7 +188,7 @@ def train(config: TrainConfig):
         r=config.lora_r,
         alpha=config.lora_alpha,
         dropout=config.lora_dropout,
-        targets=list(config.lora_targets),
+        targets=list(config.lora_targets) if config.lora_targets is not None else None,
     )
 
     if config.last_n_lora_layers is not None:
@@ -231,7 +229,11 @@ def train(config: TrainConfig):
     )
 
     train_dataset, valid_dataset = make_dataset(
-        tokenizer, config.train_path, config.valid_path, config.max_length
+        tokenizer,
+        config.train_path,
+        config.valid_path,
+        config.max_length,
+        is_encoder_decoder=is_encoder_decoder,
     )
 
     efficiency = run_trainer(

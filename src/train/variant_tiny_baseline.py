@@ -1,7 +1,6 @@
 import argparse
 
 from .common import (
-    LoRA_TARGETS_ATT_MLP,
     TrainConfig,
     apply_lora_everywhere,
     freeze_lora_outside,
@@ -32,9 +31,7 @@ def main(
 ):
     tokenizer = load_tokenizer(model_id)
     model = load_fp_model(model_id)
-    model = apply_lora_everywhere(
-        model, r=16, alpha=32, dropout=0.05, targets=LoRA_TARGETS_ATT_MLP
-    )
+    model = apply_lora_everywhere(model, r=16, alpha=32, dropout=0.05)
 
     num_layers, _ = get_num_layers_and_attr(model)
     allowed = set(last_n_indices(num_layers, last_n))
