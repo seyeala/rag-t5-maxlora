@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import torch
 
-import src.apps.gradio_chat as chat
+import apps.gradio_chat as chat
 
 
 class Batch(dict):

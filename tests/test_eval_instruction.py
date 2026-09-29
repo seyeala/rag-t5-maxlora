@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import torch
 
-import src.eval.eval_instruction as evaluation
+import eval.eval_instruction as evaluation
 
 
 def test_generated_tokens_seq2seq_uses_full_output():

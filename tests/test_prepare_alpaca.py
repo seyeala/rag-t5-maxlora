@@ -1,6 +1,6 @@
 import json
 
-import src.data.prepare_alpaca as prep
+import data.prepare_alpaca as prep
 
 
 def test_build_prompt_with_and_without_input():
