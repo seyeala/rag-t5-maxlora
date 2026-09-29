@@ -4,6 +4,7 @@ import gradio as gr
 import torch
 
 from rag_t5.models.inference import load_inference_model
+from src.eval.eval_instruction import _generated_tokens
 
 
 def _load(model_dir):
@@ -36,11 +37,7 @@ def chat_fn(instruction: str, context: str):
     inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
     with torch.no_grad():
         output = model.generate(**inputs, max_new_tokens=256, do_sample=False)
-    if getattr(model.config, "is_encoder_decoder", False):
-        decoded_tokens = output[0]
-    else:
-        decoded_tokens = output[0][inputs["input_ids"].shape[1] :]
-
+    decoded_tokens = _generated_tokens(model, output, inputs["input_ids"])
     generated = tokenizer.decode(decoded_tokens, skip_special_tokens=True).strip()
     return generated
 
@@ -50,7 +47,7 @@ def build_app(model_dir="outputs/v2_qlora_middle"):
     tokenizer, model = _load(model_dir)
 
     with gr.Blocks() as demo:
-        gr.Markdown("# Small-Decoder Chatbot (single-turn)")
+        gr.Markdown("# LoRA Fine-Tuned Model Demo (single-turn)")
         gr.Textbox(
             value=model_dir,
             label="Model directory (loaded at launch)",
