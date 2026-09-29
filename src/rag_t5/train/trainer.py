@@ -73,6 +73,8 @@ class TrainConfig:
     lora_dropout: float = 0.05
     lora_targets: Sequence[str] | None = None
     last_n_lora_layers: int | None = 2
+    train_limit: int | None = None
+    valid_limit: int | None = None
     epochs: float | None = None
 
     def __post_init__(self) -> None:
@@ -234,6 +236,8 @@ def train(config: TrainConfig):
         config.valid_path,
         config.max_length,
         is_encoder_decoder=is_encoder_decoder,
+        train_limit=config.train_limit,
+        valid_limit=config.valid_limit,
     )
 
     efficiency = run_trainer(
