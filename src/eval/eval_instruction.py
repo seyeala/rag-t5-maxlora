@@ -4,7 +4,7 @@ import re
 import string
 
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoConfig, AutoModelForCausalLM, AutoModelForSeq2SeqLM, AutoTokenizer
 
 
 def _normalize(text: str) -> str:
@@ -29,13 +29,31 @@ def _f1(prediction: str, reference: str) -> float:
     return 2 * precision * recall / (precision + recall)
 
 
-def evaluate(model_dir, valid_path, max_new_tokens=128, limit=200):
+def _load_model(model_dir):
     tokenizer = AutoTokenizer.from_pretrained(model_dir, use_fast=True)
-    model = AutoModelForCausalLM.from_pretrained(
+    config = AutoConfig.from_pretrained(model_dir)
+    model_cls = (
+        AutoModelForSeq2SeqLM
+        if getattr(config, "is_encoder_decoder", False)
+        else AutoModelForCausalLM
+    )
+    model = model_cls.from_pretrained(
         model_dir,
+        config=config,
         dtype=torch.bfloat16 if torch.cuda.is_available() else None,
     )
     model.eval()
+    return tokenizer, model
+
+
+def _generated_tokens(model, output, input_ids):
+    if getattr(model.config, "is_encoder_decoder", False):
+        return output[0]
+    return output[0][input_ids.shape[1] :]
+
+
+def evaluate(model_dir, valid_path, max_new_tokens=128, limit=200):
+    tokenizer, model = _load_model(model_dir)
 
     examples = []
     with open(valid_path, encoding="utf-8") as fp:
@@ -54,7 +72,8 @@ def evaluate(model_dir, valid_path, max_new_tokens=128, limit=200):
                 **inputs, max_new_tokens=max_new_tokens, do_sample=False
             )
         generated = tokenizer.decode(
-            output[0][inputs["input_ids"].shape[1] :], skip_special_tokens=True
+            _generated_tokens(model, output, inputs["input_ids"]),
+            skip_special_tokens=True,
         ).strip()
         em_scores.append(1.0 if _normalize(generated) == _normalize(answer) else 0.0)
         f1_scores.append(_f1(generated, answer))
