@@ -1,6 +1,5 @@
 import argparse
 
-import gradio as gr
 import torch
 
 from rag_t5.models.inference import generated_tokens, load_inference_model
@@ -42,6 +41,8 @@ def chat_fn(instruction: str, context: str):
 
 
 def build_app(model_dir="outputs/v2_qlora_middle"):
+    import gradio as gr
+
     global tokenizer, model
     tokenizer, model = _load(model_dir)
 
