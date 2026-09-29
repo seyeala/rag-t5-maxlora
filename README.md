@@ -81,7 +81,7 @@ python -m eval.eval_instruction \
   --limit 10
 ```
 
-`src.eval.eval_sst2` uses the same architecture-aware loader for sentiment evaluation.
+`rag_t5.eval.sst2` uses the same architecture-aware loader for sentiment evaluation.
 ## Merge an adapter into a standalone model
 
 Validated FLAN-T5 and causal adapters can be merged into their base model:

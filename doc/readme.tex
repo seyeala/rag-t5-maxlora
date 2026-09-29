@@ -75,16 +75,16 @@ The repository supports fine-tuning a T5 model on instruction-following data (li
 \subsection{Prepare Training Data (Alpaca)}
 The 52k Alpaca instruction-response dataset will be downloaded and processed automatically by the training scripts if not present. You can also run it manually:
 \begin{verbatim}
-python -m src.data.prepare_alpaca
+python -m data.prepare_alpaca
 \end{verbatim}
 This downloads the \emph{yahma/alpaca-cleaned} dataset and converts it into prompt-response JSONL format:contentReference[oaicite:108]{index=108}. It shuffles and splits the data (90\% train, 10\% validation):contentReference[oaicite:109]{index=109}, saving:
 \begin{itemize}
-    \item \texttt{data/processed/alpaca\_train.jsonl}
-    \item \texttt{data/processed/alpaca\_valid.jsonl}
+    \item \texttt{data/generated/alpaca\_train.jsonl}
+    \item \texttt{data/generated/alpaca\_valid.jsonl}
 \end{itemize}
 Each line in these files is a JSON object with \texttt{"prompt"} and \texttt{"answer"}. You should see a message:
 \begin{verbatim}
-Wrote 50000 train / 5200 valid records to data/processed
+Wrote the generated train/validation split under data/generated
 \end{verbatim}
 :contentReference[oaicite:110]{index=110}indicating the number of examples in each split.
 
@@ -191,9 +191,9 @@ This snippet mirrors the training helper used in the provided Colab notebooks an
 After training, evaluate the model on validation data or other benchmarks:
 
 \subsection*{Instruction Following (Alpaca Eval)}
-Use \texttt{src/eval/eval\_instruction.py} to compute metrics on the Alpaca validation set:
+Use \texttt{rag\_t5.eval.instruction} to compute metrics on the Alpaca validation set:
 \begin{verbatim}
-python -m src.eval.eval_instruction --model_dir outputs/v2_qlora_middle \
+python -m rag_t5.eval.instruction --model_dir outputs/v2_qlora_middle \
     --valid_path data/processed/alpaca_valid.jsonl
 \end{verbatim}
 This loads the model from \texttt{outputs/v2\_qlora\_middle} and generates responses for the validation examples (by default 200 examples):contentReference[oaicite:129]{index=129}:contentReference[oaicite:130]{index=130}. It then computes Exact Match (EM) and F1 between the model outputs and reference answers:contentReference[oaicite:131]{index=131}:contentReference[oaicite:132]{index=132}. The result is printed as JSON, e.g.:
@@ -203,9 +203,9 @@ This loads the model from \texttt{outputs/v2\_qlora\_middle} and generates respo
 indicating the model answered 32\% exactly correctly and achieved an average F1 of 0.56. (These numbers are illustrative only.)
 
 \subsection*{SST-2 Sentiment Classification (Optional)}
-The repo also provides \texttt{src/eval/eval\_sst2.py} for evaluating on the SST-2 sentiment dataset (as an example of prompting the model for classification). If you prepare the SST-2 validation set in JSONL (prompt + answer format), run:
+The repo also provides \texttt{rag\_t5.eval.sst2} for evaluating on the SST-2 sentiment dataset (as an example of prompting the model for classification). If you prepare the SST-2 validation set in JSONL (prompt + answer format), run:
 \begin{verbatim}
-python -m src.eval.eval_sst2 --model_dir outputs/v2_qlora_middle \
+python -m rag_t5.eval.sst2 --model_dir outputs/v2_qlora_middle \
     --path data/processed/sst2_validation.jsonl
 \end{verbatim}
 It will prompt the model for each example and interpret the generated text as "positive"/"negative" to compute accuracy:contentReference[oaicite:133]{index=133}:contentReference[oaicite:134]{index=134}, printing the accuracy score.
