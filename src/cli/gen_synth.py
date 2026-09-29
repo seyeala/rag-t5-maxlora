@@ -1,6 +1,6 @@
 import typer
 
-from synth.gen_qa_offline import generate_sft_examples, preview_examples, save_sft_dataset
+from rag_t5.synth.gen_qa_offline import generate_sft_examples, preview_examples, save_sft_dataset
 
 app = typer.Typer(help="Generate synthetic QA data from document chunks.")
 

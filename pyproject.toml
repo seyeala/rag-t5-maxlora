@@ -17,6 +17,7 @@ dependencies = [
 [project.optional-dependencies]
 data = ["datasets>=4"]
 demo = ["gradio>=5", "sentencepiece"]
+retrieval = ["faiss-cpu>=1.8"]
 dev = ["pytest>=8", "datasets>=4"]
 
 [tool.pytest.ini_options]

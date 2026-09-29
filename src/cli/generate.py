@@ -4,7 +4,6 @@ import argparse
 from pathlib import Path
 from typing import List
 
-import faiss
 import torch
 from transformers import AutoModel, AutoTokenizer
 
@@ -16,9 +15,15 @@ from rag_t5.prompt import format_prompt
 from rag_t5.utils.io import stream_jsonl
 
 
-def _load_faiss_index(index_path: Path) -> faiss.Index:
+def _load_faiss_index(index_path: Path):
     if not index_path.exists():
         raise FileNotFoundError(f"Missing FAISS index at {index_path}")
+    try:
+        import faiss
+    except ImportError as exc:
+        raise RuntimeError(
+            "FAISS is required for retrieval. Install the 'retrieval' extra."
+        ) from exc
     index = faiss.read_index(str(index_path))
     return index
 
