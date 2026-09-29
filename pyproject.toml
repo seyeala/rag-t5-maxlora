@@ -12,6 +12,7 @@ dependencies = [
   "peft>=0.12",
   "typer>=0.9",
   "pydantic>=2.0",
+  "tomli>=2; python_version < '3.11'",
 ]
 
 [project.optional-dependencies]
