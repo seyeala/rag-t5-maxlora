@@ -339,9 +339,16 @@ def freeze_lora_outside(model, allowed: set[int]):
 
 
 def unfreeze_lm_head(model):
-    if hasattr(model, "lm_head"):
-        for param in model.lm_head.parameters():
-            param.requires_grad = True
+    if not hasattr(model, "lm_head"):
+        return
+    lm_head = model.lm_head
+    # PEFT ModulesToSaveWrapper already keeps its adapter copy trainable.
+    # Unfreezing the wrapper recursively would also train the frozen original,
+    # doubling the LM-head parameter cost without adding saved state.
+    if hasattr(lm_head, "modules_to_save"):
+        return
+    for param in lm_head.parameters():
+        param.requires_grad = True
 
 
 # -------------------- Training wrapper --------------------

@@ -75,3 +75,32 @@ def test_freeze_lora_outside_handles_t5_and_causal_layer_names():
     assert not model.params["model.layers.2.self_attn.q_proj.lora_A.weight"].requires_grad
     assert model.params["model.layers.3.self_attn.q_proj.lora_A.weight"].requires_grad
     assert model.params["lm_head.weight"].requires_grad
+
+
+class FakeHeadParam:
+    def __init__(self, requires_grad=False):
+        self.requires_grad = requires_grad
+
+
+class PlainHead:
+    def __init__(self):
+        self.param = FakeHeadParam(False)
+
+    def parameters(self):
+        return [self.param]
+
+
+class WrappedHead(PlainHead):
+    def __init__(self):
+        super().__init__()
+        self.modules_to_save = {"default": object()}
+
+
+def test_unfreeze_lm_head_skips_peft_modules_to_save_wrapper():
+    wrapped = WrappedHead()
+    common.unfreeze_lm_head(SimpleNamespace(lm_head=wrapped))
+    assert wrapped.param.requires_grad is False
+
+    plain = PlainHead()
+    common.unfreeze_lm_head(SimpleNamespace(lm_head=plain))
+    assert plain.param.requires_grad is True
