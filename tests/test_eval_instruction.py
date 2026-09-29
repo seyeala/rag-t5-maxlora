@@ -19,12 +19,7 @@ def test_generated_tokens_causal_removes_prompt():
     assert evaluation._generated_tokens(model, output, inputs).tolist() == [7, 8]
 
 
-def test_load_model_selects_seq2seq(monkeypatch):
-    config = SimpleNamespace(is_encoder_decoder=True)
-    tokenizer = object()
-    model = SimpleNamespace(eval=lambda: None)
-    monkeypatch.setattr(evaluation.AutoConfig, "from_pretrained", lambda path: config)
-    monkeypatch.setattr(evaluation.AutoTokenizer, "from_pretrained", lambda *a, **k: tokenizer)
-    monkeypatch.setattr(evaluation.AutoModelForSeq2SeqLM, "from_pretrained", lambda *a, **k: model)
-    monkeypatch.setattr(evaluation.AutoModelForCausalLM, "from_pretrained", lambda *a, **k: (_ for _ in ()).throw(AssertionError("wrong model class")))
-    assert evaluation._load_model("fake") == (tokenizer, model)
+def test_load_model_delegates_to_inference_loader(monkeypatch):
+    expected = (object(), object())
+    monkeypatch.setattr(evaluation, "load_inference_model", lambda path: expected)
+    assert evaluation._load_model("fake") == expected

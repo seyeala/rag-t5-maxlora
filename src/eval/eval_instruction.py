@@ -4,7 +4,7 @@ import re
 import string
 
 import torch
-from transformers import AutoConfig, AutoModelForCausalLM, AutoModelForSeq2SeqLM, AutoTokenizer
+from rag_t5.models.inference import load_inference_model
 
 
 def _normalize(text: str) -> str:
@@ -30,20 +30,7 @@ def _f1(prediction: str, reference: str) -> float:
 
 
 def _load_model(model_dir):
-    tokenizer = AutoTokenizer.from_pretrained(model_dir, use_fast=True)
-    config = AutoConfig.from_pretrained(model_dir)
-    model_cls = (
-        AutoModelForSeq2SeqLM
-        if getattr(config, "is_encoder_decoder", False)
-        else AutoModelForCausalLM
-    )
-    model = model_cls.from_pretrained(
-        model_dir,
-        config=config,
-        dtype=torch.bfloat16 if torch.cuda.is_available() else None,
-    )
-    model.eval()
-    return tokenizer, model
+    return load_inference_model(model_dir)
 
 
 def _generated_tokens(model, output, input_ids):

@@ -311,12 +311,14 @@ def apply_lora_everywhere(
         targets = default_lora_targets(model)
     if task_type is None:
         task_type = default_lora_task_type(model)
+    modules_to_save = ["lm_head"] if hasattr(model, "lm_head") else None
     config = LoraConfig(
         r=r,
         lora_alpha=alpha,
         lora_dropout=dropout,
         target_modules=list(targets),
         task_type=task_type,
+        modules_to_save=modules_to_save,
     )
     return get_peft_model(model, config)
 

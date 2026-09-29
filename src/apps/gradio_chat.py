@@ -2,17 +2,12 @@ import argparse
 
 import gradio as gr
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+
+from rag_t5.models.inference import load_inference_model
 
 
 def _load(model_dir):
-    tokenizer = AutoTokenizer.from_pretrained(model_dir, use_fast=True)
-    model = AutoModelForCausalLM.from_pretrained(
-        model_dir,
-        dtype=torch.bfloat16 if torch.cuda.is_available() else None,
-    )
-    model.eval()
-    return tokenizer, model
+    return load_inference_model(model_dir)
 
 
 tokenizer, model = None, None

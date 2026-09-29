@@ -30,12 +30,14 @@ def test_apply_lora_builds_architecture_aware_config(monkeypatch):
 
     monkeypatch.setattr(common, "get_peft_model", fake_get_peft_model)
     model = fake_model(True)
+    model.lm_head = object()
 
     assert common.apply_lora_everywhere(model, r=4, alpha=8, dropout=0.1) == "wrapped"
     config = captured["config"]
     assert config.r == 4
     assert config.lora_alpha == 8
     assert config.task_type == TaskType.SEQ_2_SEQ_LM
+    assert config.modules_to_save == ["lm_head"]
     assert set(config.target_modules) == {"q", "k", "v", "o", "wi_0", "wi_1", "wo"}
 
 
