@@ -4,7 +4,7 @@ import re
 import string
 
 import torch
-from rag_t5.models.inference import load_inference_model
+from rag_t5.models.inference import generated_tokens, load_inference_model
 
 
 def _normalize(text: str) -> str:
@@ -33,10 +33,7 @@ def _load_model(model_dir):
     return load_inference_model(model_dir)
 
 
-def _generated_tokens(model, output, input_ids):
-    if getattr(model.config, "is_encoder_decoder", False):
-        return output[0]
-    return output[0][input_ids.shape[1] :]
+_generated_tokens = generated_tokens
 
 
 def evaluate(model_dir, valid_path, max_new_tokens=128, limit=200):

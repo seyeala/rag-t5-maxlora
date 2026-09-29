@@ -9,6 +9,12 @@ def _model_class(config):
     return AutoModelForSeq2SeqLM if getattr(config, "is_encoder_decoder", False) else AutoModelForCausalLM
 
 
+
+def generated_tokens(model, output, input_ids):
+    if getattr(model.config, "is_encoder_decoder", False):
+        return output[0]
+    return output[0][input_ids.shape[1] :]
+
 def load_inference_model(model_path: str):
     path = Path(model_path)
     is_adapter = path.is_dir() and (path / "adapter_config.json").is_file()

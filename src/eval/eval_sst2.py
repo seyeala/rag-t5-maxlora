@@ -3,8 +3,7 @@ import json
 
 import torch
 
-from rag_t5.models.inference import load_inference_model
-from src.eval.eval_instruction import _generated_tokens
+from rag_t5.models.inference import generated_tokens, load_inference_model
 
 
 def _parse_label(text: str) -> str:
@@ -35,7 +34,7 @@ def evaluate(model_dir, path="data/processed/sst2_validation.jsonl", limit=500):
                     **inputs, max_new_tokens=4, do_sample=False
                 )
             generated = tokenizer.decode(
-                _generated_tokens(model, output, inputs["input_ids"]),
+                generated_tokens(model, output, inputs["input_ids"]),
                 skip_special_tokens=True,
             ).strip()
             predictions.append(_parse_label(generated))

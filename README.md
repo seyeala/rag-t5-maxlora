@@ -32,7 +32,7 @@ GPU training requires a CUDA-enabled PyTorch installation. The Gradio demo addit
 Prepare the full Alpaca split:
 
 ```bash
-python -m src.data.prepare_alpaca
+python -m data.prepare_alpaca
 ```
 
 Generated files are written to ignored `data/generated/`. The small files under `data/processed/` are tracked samples and are not overwritten.
@@ -62,7 +62,7 @@ The saved PEFT adapter includes the trainable LM head when the model exposes one
 Instruction evaluation accepts either a standalone model directory/model ID or a local PEFT adapter directory:
 
 ```bash
-python -m src.eval.eval_instruction \
+python -m eval.eval_instruction \
   --model_dir outputs/v3_tiny_last2_lora \
   --valid_path data/processed/alpaca_valid.jsonl \
   --limit 10
@@ -87,7 +87,7 @@ Install Gradio if it is not already present:
 
 ```bash
 pip install gradio
-python -m src.apps.gradio_chat outputs/v3_tiny_last2_lora
+python -m apps.gradio_chat outputs/v3_tiny_last2_lora
 ```
 
 The demo accepts both tested PEFT adapter directories and standalone model directories. It supports seq2seq and causal generation paths.

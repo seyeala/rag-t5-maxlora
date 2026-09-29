@@ -3,8 +3,7 @@ import argparse
 import gradio as gr
 import torch
 
-from rag_t5.models.inference import load_inference_model
-from src.eval.eval_instruction import _generated_tokens
+from rag_t5.models.inference import generated_tokens, load_inference_model
 
 
 def _load(model_dir):
@@ -37,7 +36,7 @@ def chat_fn(instruction: str, context: str):
     inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
     with torch.no_grad():
         output = model.generate(**inputs, max_new_tokens=256, do_sample=False)
-    decoded_tokens = _generated_tokens(model, output, inputs["input_ids"])
+    decoded_tokens = generated_tokens(model, output, inputs["input_ids"])
     generated = tokenizer.decode(decoded_tokens, skip_special_tokens=True).strip()
     return generated
 

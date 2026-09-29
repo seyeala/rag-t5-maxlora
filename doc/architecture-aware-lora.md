@@ -30,7 +30,7 @@ You can override targets explicitly by passing `targets=` into `apply_lora_every
 Prepare the full Alpaca prompt/answer data. Generated files go to `data/generated/`; the tracked files under `data/processed/` remain small samples:
 
 ```bash
-python -m src.data.prepare_alpaca
+python -m data.prepare_alpaca
 ```
 
 Run a capped v3 smoke test:
