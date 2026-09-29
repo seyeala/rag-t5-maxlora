@@ -410,7 +410,7 @@ You can now ask other questions by changing the query text.
 \textbf{Using LoRA-tuned model for generation:} If you fine-tuned the model with LoRA (e.g., on Alpaca), you likely want to use those weights when generating answers. The \texttt{--model lora} flag in the script applies LoRA with the configured hyperparameters, but it does not automatically load your trained adapter weights. To use your trained LoRA:
 \begin{itemize}
     \item One simple way is to set the base model in \texttt{configs/defaults.toml} to your fine-tuned model’s directory (e.g., \texttt{outputs/v2\_qlora\_middle}) and use \texttt{--model base}. This way, the script will load the model including LoRA weights from that directory.
-    \item Alternatively, modify the generate script to load the LoRA checkpoint. For example, after loading the base model, use Hugging Face PEFT’s \texttt{PeftModel.from\_pretrained} to load your adapter. This requires some code changes.
+    \item Current evaluation and Gradio entrypoints load local PEFT adapter directories directly through the shared inference loader; no manual adapter-loading code change is required.
 \end{itemize}
 By default, if you use \texttt{--model base}, you get answers from the base model; if you use \texttt{--model lora}, you get answers from a base model with fresh (untrained) LoRA applied. Adjusting the code as above will allow using the fine-tuned model for RAG.
 

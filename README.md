@@ -1,34 +1,43 @@
 # RAG-T5-MaxLoRA
 
-RAG-T5-MaxLoRA is a small research codebase for retrieval-augmented generation and LoRA/QLoRA-style fine-tuning experiments. The default configuration uses `google/flan-t5-small`, while the training scripts can also run decoder-only causal language models when the selected model supports that path.
+RAG-T5-MaxLoRA is a research codebase for LoRA/QLoRA-style fine-tuning and evaluation. The tested training and inference paths support both encoder-decoder models such as FLAN-T5 and decoder-only causal models.
 
-The current training helpers choose LoRA target modules and PEFT task type from the model architecture:
+Architecture-aware defaults:
+- FLAN-T5/T5: `SEQ_2_SEQ_LM` with `q, k, v, o, wi_0, wi_1, wo`.
+- Llama-like causal models: `CAUSAL_LM` with `q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj`.
 
-- Encoder-decoder models such as FLAN-T5 use T5 module names and `SEQ_2_SEQ_LM`.
-- Decoder-only causal models use projection module names such as `q_proj` and `CAUSAL_LM`.
-
-See [`doc/architecture-aware-lora.md`](doc/architecture-aware-lora.md) for details and smoke-test commands.
+See `doc/architecture-aware-lora.md` for implementation details.
 
 ## Setup
+
+Minimal editable install:
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 pip install -e .
-pip install datasets accelerate bitsandbytes gradio sentencepiece
 ```
 
-Use a CUDA-enabled PyTorch installation for GPU training.
+For the regression suite:
+``bash
+pip install -e '.[dev]'
+pytest
+```
 
-## Prepare data
+GPU training requires a CUDA-enabled PyTorch installation. The Gradio demo additionally requires `gradio`; `sentencepiece` may be needed by selected tokenizers.
+
+## Data
+
+Prepare the full Alpaca split:
+
 ```bash
 python -m src.data.prepare_alpaca
 ```
 
-This writes the full generated Alpaca split under `data/generated/`. The small files under `data/processed/` are tracked sample data and are left unchanged.
+Generated files are written to ignored `data/generated/`. The small files under `data/processed/` are tracked samples and are not overwritten.
 
-## Train variants
+## Train
 
 ```bash
 make v1
@@ -36,9 +45,8 @@ make v2
 make v3
 ```
 
-The helper script is `scripts/train_variant.sh`. It uses `data/generated/` by default and prepares that directory automatically when needed. It supports `MODEL_ID`, `DATA_DIR`, `TRAIN_PATH`, `VALID_PATH`, `MAX_STEPS`, `TRAIN_LIMIT`, `VALID_LIMIT`, `EPOCHS`, `BS`, and `ACCUM` environment overrides.
-
-Example smoke test with FLAN-T5:
+The wrapper `scripts/train_variant.sh` supports `MODEL_ID`, `DATA_DIR`, `TRAIN_PATH`, `VALID_PATH`, `MAX_STEPS`, `TRAIN_LIMIT`, `VALID_LIMIT`, `EPOCHS`, `BS`, and `ACCUM`.
+FLAN-T5 smoke example:
 
 ```bash
 MODEL_ID=google/flan-t5-small \
@@ -46,26 +54,54 @@ MAX_STEPS=5 TRAIN_LIMIT=50 VALID_LIMIT=10 \
 EPOCHS=1 BS=1 ACCUM=1 \
 bash scripts/train_variant.sh v3
 ```
-## Evaluate
+
+The saved PEFT adapter includes the trainable LM head when the model exposes one.
+
+## Evaluate adapters or full models
+
+Instruction evaluation accepts either a standalone model directory/model ID or a local PEFT adapter directory:
 
 ```bash
-make eval_v1
-make eval_v2
-make eval_v3
+python -m src.eval.eval_instruction \
+  --model_dir outputs/v3_tiny_last2_lora \
+  --valid_path data/processed/alpaca_valid.jsonl \
+  --limit 10
 ```
 
-## Demo
+`src.eval.eval_sst2` uses the same architecture-aware loader for sentiment evaluation.
+## Merge an adapter into a standalone model
+
+Validated FLAN-T5 and causal adapters can be merged into their base model:
 
 ```bash
-make demo_v2
+python -m rag_t5.models.export \
+  outputs/v3_tiny_last2_lora \
+  outputs/v3_merged
 ```
 
-or run directly:
+The merged directory contains a standalone Transformers model plus tokenizer files. T5/FLAN-T5 may emit a PEFT warning that input/output embeddings become untied during merge; deterministic pre/post-merge token output was verified for the tested FLAN-T5 path.
+
+## Gradio demo
+
+Install Gradio if it is not already present:
 
 ```bash
-python -m src.apps.gradio_chat outputs/v2_qlora_middle
+pip install gradio
+python -m src.apps.gradio_chat outputs/v3_tiny_last2_lora
 ```
+
+The demo accepts both tested PEFT adapter directories and standalone model directories. It supports seq2seq and causal generation paths.
+## Tests and CI
+
+The CPU regression suite runs with:
+
+```bash
+pip install -e '.[dev]'
+pytest
+```
+
+GitHub Actions runs the suite on Python 3.11 and Python 3.12. Unit tests do not download models or datasets.
 
 ## Repository hygiene
 
-Do not commit generated adapters, model outputs, logs, local virtual environments, or workstation-specific test plans. Keep large local artifacts outside the repo, for example under a separate persistent storage directory.
+Do not commit generated datasets, adapters, merged models, logs, virtual environments, or workstation-specific test plans. Generated training data belongs under ignored `data/generated/`; large persistent artifacts should remain outside the repository.

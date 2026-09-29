@@ -66,10 +66,24 @@ train(cfg)
 ## Notes and limits
 
 - A smoke test verifies that the training path runs and writes adapter artifacts. It does not measure model quality.
-- The v3 script still unfreezes the LM head after applying LoRA. As a result, trainable parameters include LoRA adapters plus the LM head.
+- When a model exposes `lm_head`, PEFT stores that trainable head with the adapter. The wrapper avoids unfreezing PEFT's frozen original copy, so the head is not trained twice.
 - `data/generated/`, model outputs, virtual environments, caches, and local logs are ignored by Git; keep large persistent artifacts outside the repository.
 - `data/processed/` contains tracked small sample data used by direct CLI and variant defaults.
 - When using a new model family, confirm the target modules exist before launching a long run.
+
+
+
+## Loading and exporting adapters
+
+Evaluation and the Gradio demo accept a local PEFT adapter directory. The shared loader reads `adapter_config.json`, loads the recorded base model, and attaches the adapter with PEFT.
+
+To merge a validated adapter into a standalone Transformers model:
+
+```bash
+python -m rag_t5.models.export outputs/v3_tiny_last2_lora outputs/v3_merged
+```
+
+For the tested FLAN-T5 and tiny-Llama paths, deterministic generated token IDs were identical before merge, immediately after merge, and after reloading the saved merged model. PEFT warns that T5 input/output embeddings become untied during merge; the tested deterministic output remained identical.
 
 ## Relevant source files
 
