@@ -2,7 +2,9 @@ import argparse
 import json
 
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+
+from rag_t5.models.inference import load_inference_model
+from src.eval.eval_instruction import _generated_tokens
 
 
 def _parse_label(text: str) -> str:
@@ -19,12 +21,7 @@ def _parse_label(text: str) -> str:
 
 
 def evaluate(model_dir, path="data/processed/sst2_validation.jsonl", limit=500):
-    tokenizer = AutoTokenizer.from_pretrained(model_dir, use_fast=True)
-    model = AutoModelForCausalLM.from_pretrained(
-        model_dir,
-        dtype=torch.bfloat16 if torch.cuda.is_available() else None,
-    )
-    model.eval()
+    tokenizer, model = load_inference_model(model_dir)
 
     gold, predictions = [], []
     with open(path, encoding="utf-8") as fp:
@@ -38,7 +35,8 @@ def evaluate(model_dir, path="data/processed/sst2_validation.jsonl", limit=500):
                     **inputs, max_new_tokens=4, do_sample=False
                 )
             generated = tokenizer.decode(
-                output[0][inputs["input_ids"].shape[1] :], skip_special_tokens=True
+                _generated_tokens(model, output, inputs["input_ids"]),
+                skip_special_tokens=True,
             ).strip()
             predictions.append(_parse_label(generated))
             gold.append(example["answer"])
