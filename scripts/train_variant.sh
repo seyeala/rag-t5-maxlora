@@ -34,6 +34,9 @@ ACCUM="${ACCUM:-16}"
 MAX_STEPS="${MAX_STEPS:-}"
 TRAIN_LIMIT="${TRAIN_LIMIT:-}"
 VALID_LIMIT="${VALID_LIMIT:-}"
+DATA_DIR="${DATA_DIR:-data/generated}"
+TRAIN_PATH="${TRAIN_PATH:-${DATA_DIR}/alpaca_train.jsonl}"
+VALID_PATH="${VALID_PATH:-${DATA_DIR}/alpaca_valid.jsonl}"
 
 EXTRA_ARGS=()
 if [[ -n "${MAX_STEPS}" ]]; then
@@ -46,23 +49,20 @@ if [[ -n "${VALID_LIMIT}" ]]; then
   EXTRA_ARGS+=("--valid_limit" "${VALID_LIMIT}")
 fi
 
-if python - "${PYTHONPATH:-}" <<'PY'
+if [[ -f "${TRAIN_PATH}" && -f "${VALID_PATH}" ]]; then
+  echo "[train_variant] Using existing data: ${TRAIN_PATH} / ${VALID_PATH}" >&2
+elif python - "${PYTHONPATH:-}" <<'PY'
 import importlib.util
 import sys
 
-if importlib.util.find_spec("datasets") is None:
-    sys.exit(1)
+sys.exit(0 if importlib.util.find_spec("datasets") is not None else 1)
 PY
 then
-  python -m src.data.prepare_alpaca
+  python -m src.data.prepare_alpaca --out-dir "${DATA_DIR}"
 else
-  if [[ -f data/processed/alpaca_train.jsonl && -f data/processed/alpaca_valid.jsonl ]]; then
-    echo "[train_variant] datasets library missing; using existing processed Alpaca split." >&2
-  else
-    echo "[train_variant] datasets library missing and processed data not found." >&2
-    echo "[train_variant] Install 'datasets' or provide Alpaca splits in data/processed/." >&2
-    exit 1
-  fi
+  echo "[train_variant] Training data not found: ${TRAIN_PATH} / ${VALID_PATH}" >&2
+  echo "[train_variant] Install 'datasets' to prepare Alpaca automatically, or provide TRAIN_PATH and VALID_PATH." >&2
+  exit 1
 fi
 
 case "${VARIANT}" in
@@ -70,8 +70,8 @@ case "${VARIANT}" in
     CMD=(
       python -m src.train.variant_middle_ft
       --model_id "${MODEL_ID}"
-      --train_path data/processed/alpaca_train.jsonl
-      --valid_path data/processed/alpaca_valid.jsonl
+      --train_path "${TRAIN_PATH}"
+      --valid_path "${VALID_PATH}"
       --out_dir outputs/v1_middle_ft
       --max_length "${MAXLEN}" --epochs "${EPOCHS}" --bs "${BS}" --accum "${ACCUM}" --lr 1e-5
     )
@@ -82,8 +82,8 @@ case "${VARIANT}" in
     CMD=(
       python -m src.train.variant_qlora_middle
       --model_id "${MODEL_ID}"
-      --train_path data/processed/alpaca_train.jsonl
-      --valid_path data/processed/alpaca_valid.jsonl
+      --train_path "${TRAIN_PATH}"
+      --valid_path "${VALID_PATH}"
       --out_dir outputs/v2_qlora_middle
       --max_length "${MAXLEN}" --epochs "${EPOCHS}" --bs "${BS}" --accum "${ACCUM}" --lr 2e-4
     )
@@ -94,8 +94,8 @@ case "${VARIANT}" in
     CMD=(
       python -m src.train.variant_tiny_baseline
       --model_id "${MODEL_ID}"
-      --train_path data/processed/alpaca_train.jsonl
-      --valid_path data/processed/alpaca_valid.jsonl
+      --train_path "${TRAIN_PATH}"
+      --valid_path "${VALID_PATH}"
       --out_dir outputs/v3_tiny_last2_lora
       --max_length "${MAXLEN}" --epochs "${EPOCHS}" --bs "${BS}" --accum "${ACCUM}" --lr 2e-4 --last_n 2
     )

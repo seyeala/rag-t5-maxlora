@@ -26,7 +26,7 @@ Use a CUDA-enabled PyTorch installation for GPU training.
 python -m src.data.prepare_alpaca
 ```
 
-This writes JSONL prompt/answer data under `data/processed/`.
+This writes the full generated Alpaca split under `data/generated/`. The small files under `data/processed/` are tracked sample data and are left unchanged.
 
 ## Train variants
 
@@ -36,7 +36,7 @@ make v2
 make v3
 ```
 
-The helper script is `scripts/train_variant.sh`. It supports `MODEL_ID`, `MAX_STEPS`, `TRAIN_LIMIT`, `VALID_LIMIT`, `EPOCHS`, `BS`, and `ACCUM` environment overrides.
+The helper script is `scripts/train_variant.sh`. It uses `data/generated/` by default and prepares that directory automatically when needed. It supports `MODEL_ID`, `DATA_DIR`, `TRAIN_PATH`, `VALID_PATH`, `MAX_STEPS`, `TRAIN_LIMIT`, `VALID_LIMIT`, `EPOCHS`, `BS`, and `ACCUM` environment overrides.
 
 Example smoke test with FLAN-T5:
 

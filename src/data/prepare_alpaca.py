@@ -1,3 +1,4 @@
+import argparse
 import json
 import random
 from pathlib import Path
@@ -26,7 +27,7 @@ def build_prompt(example):
     )
 
 
-def main(out_dir="data/processed", split_ratio=0.1):
+def main(out_dir="data/generated", split_ratio=0.1):
     dataset = load_dataset("yahma/alpaca-cleaned")["train"]
     records = []
     for example in dataset:
@@ -60,5 +61,24 @@ def main(out_dir="data/processed", split_ratio=0.1):
     )
 
 
+def _parse_args():
+    parser = argparse.ArgumentParser(
+        description="Prepare the full Alpaca dataset as prompt/answer JSONL files."
+    )
+    parser.add_argument(
+        "--out-dir",
+        default="data/generated",
+        help="Directory for generated Alpaca JSONL files.",
+    )
+    parser.add_argument(
+        "--split-ratio",
+        type=float,
+        default=0.1,
+        help="Fraction of records reserved for validation.",
+    )
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    main()
+    args = _parse_args()
+    main(out_dir=args.out_dir, split_ratio=args.split_ratio)

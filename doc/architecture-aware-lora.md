@@ -27,7 +27,7 @@ You can override targets explicitly by passing `targets=` into `apply_lora_every
 
 ## A minimal FLAN-T5 smoke test
 
-Prepare the Alpaca prompt/answer data:
+Prepare the full Alpaca prompt/answer data. Generated files go to `data/generated/`; the tracked files under `data/processed/` remain small samples:
 
 ```bash
 python -m src.data.prepare_alpaca
@@ -52,8 +52,8 @@ from rag_t5.train.trainer import TrainConfig, train
 
 cfg = TrainConfig(
     model_id="google/flan-t5-small",
-    train_path="data/processed/alpaca_train.jsonl",
-    valid_path="data/processed/alpaca_valid.jsonl",
+    train_path="data/generated/alpaca_train.jsonl",
+    valid_path="data/generated/alpaca_valid.jsonl",
     out_dir="outputs/flan_t5_lora_smoke",
     max_steps=5,
     train_limit=50,
@@ -67,7 +67,8 @@ train(cfg)
 
 - A smoke test verifies that the training path runs and writes adapter artifacts. It does not measure model quality.
 - The v3 script still unfreezes the LM head after applying LoRA. As a result, trainable parameters include LoRA adapters plus the LM head.
-- Keep generated model artifacts and local logs outside version control unless you intentionally publish them elsewhere.
+- `data/generated/`, model outputs, virtual environments, caches, and local logs are ignored by Git; keep large persistent artifacts outside the repository.
+- `data/processed/` contains tracked small sample data used by direct CLI and variant defaults.
 - When using a new model family, confirm the target modules exist before launching a long run.
 
 ## Relevant source files
