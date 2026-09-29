@@ -19,13 +19,26 @@ python -m pip install --upgrade pip
 pip install -e .
 ```
 
+For data preparation, install the data extra:
+
+```bash
+pip install -e '.[data]'
+```
+
+For the Gradio demo and tokenizer support:
+
+```bash
+pip install -e '.[demo]'
+```
+
 For the regression suite:
-``bash
+
+```bash
 pip install -e '.[dev]'
 pytest
 ```
 
-GPU training requires a CUDA-enabled PyTorch installation. The Gradio demo additionally requires `gradio`; `sentencepiece` may be needed by selected tokenizers.
+GPU training requires a CUDA-enabled PyTorch installation.
 
 ## Data
 
@@ -83,10 +96,10 @@ The merged directory contains a standalone Transformers model plus tokenizer fil
 
 ## Gradio demo
 
-Install Gradio if it is not already present:
+Install the demo extra if it is not already present:
 
 ```bash
-pip install gradio
+pip install -e '.[demo]'
 python -m apps.gradio_chat outputs/v3_tiny_last2_lora
 ```
 
