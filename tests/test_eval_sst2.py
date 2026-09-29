@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import torch
 
-import eval.eval_sst2 as sst2
+import rag_t5.eval.sst2 as sst2
 
 
 def test_parse_label():
